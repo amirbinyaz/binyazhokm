@@ -15,13 +15,12 @@
     <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- FontAwesome -->
+    <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- Tone.js for Sound Effects -->
+    <!-- Tone.js for premium synthesizer sound effects -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 
-    <!-- Custom Styles -->
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap');
         
@@ -51,9 +50,6 @@
             0% { transform: scale(0.5); opacity: 0; }
             50% { transform: scale(1.2); opacity: 1; }
             100% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes shine {
-            to { background-position: 200% center; }
         }
         .intro-logo {
             animation: logoScale 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
@@ -88,7 +84,7 @@
         .card-center { font-size: 1.75rem; align-self: center; }
         .card-bottom { font-size: 0.85rem; font-weight: bold; line-height: 1; transform: rotate(180deg); }
         
-        /* Game Table Area */
+        /* Game Table Felt Gradient */
         .game-table-bg {
             background: radial-gradient(circle at center, #075e3a, #012b1a);
             border: 12px solid #5c2c16;
@@ -96,7 +92,7 @@
             box-shadow: inset 0 0 40px rgba(0,0,0,0.8), 0 15px 40px rgba(0,0,0,0.9);
         }
 
-        /* Scrollbar */
+        /* Custom Scrollbar for Lobby lists */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #1e293b; }
         ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
@@ -113,6 +109,7 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // Let global scripts trigger loading
         window.fb = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, collection, getDocs };
         window.dispatchEvent(new Event('firebaseLoaded'));
     </script>
@@ -208,7 +205,7 @@
                                 </button>
                             )}
                         </div>
-                        <div className="p-6 bg-slate-900/90 text-slate-200">
+                        <div className="p-6 bg-slate-900/90 text-slate-200 max-h-[80vh] overflow-y-auto">
                             {children}
                         </div>
                     </div>
@@ -249,6 +246,8 @@
             const [view, setView] = useState('intro'); // intro, auth, lobby, table_setup, game, admin
             const [user, setUser] = useState(null); // { username, coins, wins, isAdmin }
             const [fbUser, setFbUser] = useState(null); // Firebase Auth User
+            const [isServerConfigured, setIsServerConfigured] = useState(false);
+            const [showServerModal, setShowServerModal] = useState(false);
             const [registeredUsers, setRegisteredUsers] = useState(() => {
                 try {
                     const saved = localStorage.getItem('binyaz_users');
@@ -264,31 +263,53 @@
 
             const showToast = (message, type = 'info') => setToast({ message, type });
 
-            useEffect(() => {
-                const initFb = async () => {
-                    if (!window.fb) return;
-                    const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore } = window.fb;
-                    try {
-                        const configStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
-                        const config = JSON.parse(configStr);
-                        if (Object.keys(config).length === 0) return;
-                        
-                        const app = initializeApp(config);
-                        const auth = getAuth(app);
-                        window.firebaseDb = getFirestore(app);
+            // Config Form State
+            const [apiConfig, setApiConfig] = useState(() => {
+                const saved = localStorage.getItem('binyaz_firebase_config');
+                return saved ? JSON.parse(saved) : { apiKey: '', authDomain: '', projectId: '', appId: '' };
+            });
 
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                        setFbUser(auth.currentUser);
-                    } catch (e) { console.error('Firebase Auth Error:', e); }
-                };
-                
-                if (window.fb) initFb();
-                else window.addEventListener('firebaseLoaded', initFb);
-                return () => window.removeEventListener('firebaseLoaded', initFb);
+            const initFbConnection = async (customConfig = null) => {
+                if (!window.fb) return;
+                const { initializeApp, getAuth, signInAnonymously, getFirestore } = window.fb;
+                try {
+                    let config = null;
+                    const savedConfig = localStorage.getItem('binyaz_firebase_config');
+                    
+                    if (customConfig) {
+                        config = customConfig;
+                    } else if (savedConfig) {
+                        config = JSON.parse(savedConfig);
+                    } else {
+                        // Check environment injected variables
+                        const configStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+                        config = JSON.parse(configStr);
+                    }
+
+                    if (!config || !config.apiKey || !config.projectId) {
+                        setIsServerConfigured(false);
+                        return;
+                    }
+                    
+                    const app = initializeApp(config);
+                    const auth = getAuth(app);
+                    window.firebaseDb = getFirestore(app);
+
+                    await signInAnonymously(auth);
+                    setFbUser(auth.currentUser);
+                    setIsServerConfigured(true);
+                    showToast("اتصال به سرور ابری گوگل با موفقیت برقرار شد!", "success");
+                } catch (e) { 
+                    console.error('Firebase Auth Error:', e); 
+                    showToast("خطا در اتصال به سرور گوگل. لطفاً تنظیمات فایربیس را بررسی کنید.", "error");
+                    setIsServerConfigured(false);
+                }
+            };
+
+            useEffect(() => {
+                if (window.fb) initFbConnection();
+                else window.addEventListener('firebaseLoaded', () => initFbConnection());
+                return () => window.removeEventListener('firebaseLoaded', () => initFbConnection());
             }, []);
 
             useEffect(() => {
@@ -345,16 +366,96 @@
                 }
             };
 
+            const saveCloudConfig = (e) => {
+                e.preventDefault();
+                if (!apiConfig.apiKey || !apiConfig.projectId || !apiConfig.authDomain || !apiConfig.appId) {
+                    showToast("لطفاً تمام فیلدها را با دقت پر کنید.", "warning");
+                    return;
+                }
+                localStorage.setItem('binyaz_firebase_config', JSON.stringify(apiConfig));
+                initFbConnection(apiConfig);
+                setShowServerModal(false);
+            };
+
             return (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950 overflow-hidden">
                     {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
                     
                     {view === 'intro' && <IntroScreen />}
-                    {view === 'auth' && <AuthScreen setView={setView} setUser={setUser} showToast={showToast} registeredUsers={registeredUsers} setRegisteredUsers={setRegisteredUsers} />}
-                    {view === 'lobby' && <LobbyScreen user={user} setView={setView} globalAd={globalAd} />}
-                    {view === 'table_setup' && <TableSetupScreen setView={setView} setGameConfig={setGameConfig} showToast={showToast} user={user} fbUser={fbUser} />}
+                    {view === 'auth' && <AuthScreen setView={setView} setUser={setUser} showToast={showToast} registeredUsers={registeredUsers} setRegisteredUsers={setRegisteredUsers} setShowServerModal={setShowServerModal} isServerConfigured={isServerConfigured} />}
+                    {view === 'lobby' && <LobbyScreen user={user} setView={setView} globalAd={globalAd} setShowServerModal={setShowServerModal} isServerConfigured={isServerConfigured} />}
+                    {view === 'table_setup' && <TableSetupScreen setView={setView} setGameConfig={setGameConfig} showToast={showToast} user={user} fbUser={fbUser} isServerConfigured={isServerConfigured} />}
                     {view === 'game' && <GameScreen user={user} config={gameConfig} setView={setView} updateCoins={updateCoins} updateWins={updateWins} globalAd={globalAd} showToast={showToast} fbUser={fbUser} />}
                     {view === 'admin' && <AdminScreen user={user} setView={setView} showToast={showToast} globalAd={globalAd} setGlobalAd={setGlobalAd} />}
+
+                    {}
+                    <Modal isOpen={showServerModal} title="⚙️ تنظیمات اتصال به سرور ابری گوگل" onClose={() => setShowServerModal(false)}>
+                        <form onSubmit={saveCloudConfig} className="space-y-4">
+                            <p className="text-xs text-slate-400 leading-relaxed">
+                                برای فعال‌سازی کامل بخش بازی دونفره/چهارنفره آنلاین، لطفاً اطلاعات اپلیکیشن فایربیس (Firebase) خود را در فرم زیر وارد کنید.
+                            </p>
+                            <div>
+                                <label className="block text-slate-300 text-xs font-bold mb-1">API Key</label>
+                                <input 
+                                    type="text" 
+                                    value={apiConfig.apiKey}
+                                    onChange={(e) => setApiConfig({...apiConfig, apiKey: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-white text-xs placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                                    placeholder="AIzaSy..."
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-slate-300 text-xs font-bold mb-1">Auth Domain</label>
+                                <input 
+                                    type="text" 
+                                    value={apiConfig.authDomain}
+                                    onChange={(e) => setApiConfig({...apiConfig, authDomain: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-white text-xs placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                                    placeholder="project-id.firebaseapp.com"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-slate-300 text-xs font-bold mb-1">Project ID</label>
+                                <input 
+                                    type="text" 
+                                    value={apiConfig.projectId}
+                                    onChange={(e) => setApiConfig({...apiConfig, projectId: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-white text-xs placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                                    placeholder="project-id"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-slate-300 text-xs font-bold mb-1">App ID</label>
+                                <input 
+                                    type="text" 
+                                    value={apiConfig.appId}
+                                    onChange={(e) => setApiConfig({...apiConfig, appId: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-white text-xs placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                                    placeholder="1:12345:web:abcdef..."
+                                />
+                            </div>
+
+                            <div className="flex gap-2 pt-2">
+                                <button 
+                                    type="submit"
+                                    className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-900 font-bold py-2 rounded-xl text-xs transition"
+                                >
+                                    ذخیره و اتصال مجدد
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => {
+                                        localStorage.removeItem('binyaz_firebase_config');
+                                        setApiConfig({ apiKey: '', authDomain: '', projectId: '', appId: '' });
+                                        showToast("تنظیمات فایربیس ریست شد.", "info");
+                                    }}
+                                    className="bg-rose-900/40 hover:bg-rose-950 border border-rose-800 text-rose-300 font-bold px-3 py-2 rounded-xl text-xs transition"
+                                >
+                                    پاک کردن تنظیمات
+                                </button>
+                            </div>
+                        </form>
+                    </Modal>
                 </div>
             );
         };
@@ -376,7 +477,7 @@
             </div>
         );
 
-        const AuthScreen = ({ setView, setUser, showToast, registeredUsers, setRegisteredUsers }) => {
+        const AuthScreen = ({ setView, setUser, showToast, registeredUsers, setRegisteredUsers, setShowServerModal, isServerConfigured }) => {
             const [username, setUsername] = useState('');
             const [password, setPassword] = useState('');
 
@@ -462,6 +563,7 @@
                                     />
                                 </div>
                             </div>
+                            
                             <button 
                                 type="submit"
                                 className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold text-lg py-3 px-4 rounded-xl shadow-lg transform transition hover:scale-[1.02] active:scale-95"
@@ -469,12 +571,22 @@
                                 ورود به بازی
                             </button>
                         </form>
+
+                        <div className="mt-6 pt-4 border-t border-slate-800 text-center relative z-10">
+                            <button 
+                                onClick={() => setShowServerModal(true)}
+                                className={`text-xs font-bold flex items-center gap-2 mx-auto px-4 py-2 rounded-xl transition ${isServerConfigured ? 'text-emerald-400 bg-emerald-950/20' : 'text-amber-400 bg-amber-950/20 animate-pulse'}`}
+                            >
+                                <i className="fas fa-server"></i>
+                                <span>{isServerConfigured ? 'تنظیمات سرور ابری (متصل شده)' : 'تنظیم سرور ابری گوگل فایربیس'}</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             );
         };
 
-        const LobbyScreen = ({ user, setView, globalAd }) => {
+        const LobbyScreen = ({ user, setView, globalAd, setShowServerModal, isServerConfigured }) => {
             const [onlineCount, setOnlineCount] = useState(1243);
             const [leaderboard, setLeaderboard] = useState([]);
 
@@ -508,7 +620,7 @@
                                 </p>
                             </div>
                         </div>
-                        <div className="text-left flex flex-col items-end">
+                        <div className="text-left flex flex-col items-end gap-1">
                             <div className="text-emerald-400 text-sm font-bold flex items-center gap-2 justify-end">
                                 <span className="relative flex h-3 w-3">
                                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -516,9 +628,13 @@
                                 </span>
                                 {onlineCount.toLocaleString()} آنلاین
                             </div>
-                            {user.isAdmin && (
-                                <button onClick={() => setView('admin')} className="text-xs text-amber-400 underline mt-1">پنل مدیریت</button>
-                            )}
+                            <button 
+                                onClick={() => setShowServerModal(true)}
+                                className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition flex items-center gap-1.5 ${isServerConfigured ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800' : 'bg-rose-950/40 text-rose-400 border border-rose-800'}`}
+                            >
+                                <span className={`w-1.5 h-1.5 rounded-full ${isServerConfigured ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
+                                {isServerConfigured ? 'سرور ابری گوگل وصل است' : 'سرور قطع است'}
+                            </button>
                         </div>
                     </div>
 
@@ -574,9 +690,8 @@
             );
         };
 
-        const TableSetupScreen = ({ setView, setGameConfig, showToast, user, fbUser }) => {
+        const TableSetupScreen = ({ setView, setGameConfig, showToast, user, fbUser, isServerConfigured }) => {
             const [mode, setMode] = useState('offline'); // offline, create, join
-            const [playersCount, setPlayersCount] = useState(4); // Only 4 is standard for offline simulation
             const [tableId, setTableId] = useState('');
             const [tablePass, setTablePass] = useState('');
             const [isLoading, setIsLoading] = useState(false);
@@ -585,6 +700,11 @@
                 if (mode === 'offline') {
                     setGameConfig({ isOffline: true, playersCount: 4, mySlot: 'p1' });
                     setView('game');
+                    return;
+                }
+
+                if (!isServerConfigured) {
+                    showToast('اتصال به سرور برقرار نیست! ابتدا از صفحه قبل تنظیمات فایربیس گوگل را کامل کنید.', 'error');
                     return;
                 }
 
@@ -599,7 +719,7 @@
                 }
                 
                 setIsLoading(true);
-                const { doc, setDoc, getDoc, updateDoc, onSnapshot } = window.fb;
+                const { doc, setDoc, getDoc, updateDoc } = window.fb;
                 const db = window.firebaseDb;
 
                 try {
@@ -723,13 +843,20 @@
                             </div>
                         ) : (
                             <div className="space-y-4">
+                                {!isServerConfigured && (
+                                    <div className="bg-rose-950/40 text-rose-300 border border-rose-900/50 p-3 rounded-2xl text-xs flex gap-2">
+                                        <i className="fas fa-exclamation-triangle mt-0.5"></i>
+                                        <span>برای استفاده از بخش آنلاین باید ابتدا مشخصات سرور ابری فایربیس گوگل را در بخش تنظیمات صفحه قبل ذخیره کنید.</span>
+                                    </div>
+                                )}
                                 <div>
                                     <label className="block text-slate-400 text-xs font-bold mb-2">شناسه عددی میز</label>
                                     <input 
                                         type="text" 
                                         value={tableId}
                                         onChange={(e) => setTableId(e.target.value.replace(/\D/g, ''))}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-amber-500 text-center text-lg font-black tracking-widest"
+                                        disabled={!isServerConfigured}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-amber-500 text-center text-lg font-black tracking-widest disabled:opacity-50"
                                         placeholder="مثال: 12345"
                                     />
                                 </div>
@@ -739,7 +866,8 @@
                                         type="password" 
                                         value={tablePass}
                                         onChange={(e) => setTablePass(e.target.value)}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-amber-500 text-center"
+                                        disabled={!isServerConfigured}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-amber-500 text-center disabled:opacity-50"
                                         placeholder="••••"
                                     />
                                 </div>
@@ -748,8 +876,8 @@
 
                         <button 
                             onClick={handleAction}
-                            disabled={isLoading}
-                            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2"
+                            disabled={isLoading || (mode !== 'offline' && !isServerConfigured)}
+                            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isLoading ? (
                                 <i className="fas fa-spinner animate-spin"></i>
@@ -1142,13 +1270,11 @@
                     
                     if (nextScores.team1 === 7 || nextScores.team2 === 7) {
                         updatePayload.phase = 'match_finished';
-                        // Note: Clients handle local coin/win updates when phase changes to match_finished
                     } else {
                         // Change ruler/hakm
                         let nextRuler = currentState.ruler;
                         if (!team1Win && currentState.ruler === 'p1') nextRuler = 'p2';
                         else if (team1Win && currentState.ruler === 'p2') nextRuler = 'p1';
-                        // Add more complex logic for p3, p4 if needed
 
                         updatePayload.ruler = nextRuler;
                         updatePayload.phase = 'round_finished';
@@ -1233,21 +1359,6 @@
                     leadSuit: null
                 });
             };
-
-            // Handle online win/loss side effects
-            useEffect(() => {
-                if(!isOffline && gameState.phase === 'match_finished') {
-                    // Avoid multiple calls by checking if it was already updated
-                    const team1Win = gameState.scores.team1 === 7;
-                    const isTeam1 = mySlot === 'p1' || mySlot === 'p3';
-                    
-                    // Simple local notification for the player
-                    if((team1Win && isTeam1) || (!team1Win && !isTeam1)) {
-                         // We don't call updateWins here directly because it might run multiple times 
-                         // during re-renders. A better approach is handling this state via a modal button.
-                    }
-                }
-            }, [gameState.phase, isOffline]);
 
             return (
                 <div className="w-full h-full flex flex-col justify-between p-4 overflow-hidden relative">
@@ -1371,7 +1482,7 @@
                         </div>
                     </div>
 
-                    {/* Suit Selector Modal for Rule-maker (Hاکم) */}
+                    {/* Suit Selector Modal for Rule-maker (حاکم) */}
                     {gameState.phase === 'select_hokm' && gameState.ruler === mySlot && (
                         <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-30 flex flex-col items-center justify-center p-6 text-center">
                             <i className="fas fa-crown text-6xl text-amber-400 mb-4 animate-bounce"></i>
