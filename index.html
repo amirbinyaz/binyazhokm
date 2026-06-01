@@ -18,6 +18,9 @@
     <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
+    <!-- Tone.js for Sound Effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
     <!-- Custom Styles -->
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap');
@@ -26,7 +29,7 @@
             font-family: 'Vazirmatn', sans-serif;
             background-color: #0f172a; /* Slate 900 */
             color: #f8fafc;
-            overflow: hidden;
+            overflow-x: hidden;
             user-select: none;
             -webkit-user-select: none;
         }
@@ -58,37 +61,39 @@
         
         /* Playing Card Styles */
         .playing-card {
-            width: 14vw;
-            max-width: 80px;
-            aspect-ratio: 2.5/3.5;
+            width: 13vw;
+            max-width: 72px;
+            aspect-ratio: 2.5/3.7;
             background: white;
             border-radius: 8px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
             padding: 4px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-            border: 1px solid #ccc;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+            border: 1px solid #ddd;
             cursor: pointer;
-            transition: transform 0.2s, top 0.2s;
+            transition: all 0.2s ease;
             position: relative;
         }
         .playing-card:hover:not(.disabled) {
-            transform: translateY(-10px);
+            transform: translateY(-12px) scale(1.05);
+            box-shadow: 0 10px 15px rgba(245, 158, 11, 0.4);
+            border-color: #fbbf24;
         }
         .playing-card.red { color: #ef4444; }
         .playing-card.black { color: #1e293b; }
         
-        .card-top { font-size: 1rem; font-weight: bold; line-height: 1; }
-        .card-center { font-size: 2rem; align-self: center; }
-        .card-bottom { font-size: 1rem; font-weight: bold; line-height: 1; transform: rotate(180deg); }
+        .card-top { font-size: 0.85rem; font-weight: bold; line-height: 1; }
+        .card-center { font-size: 1.75rem; align-self: center; }
+        .card-bottom { font-size: 0.85rem; font-weight: bold; line-height: 1; transform: rotate(180deg); }
         
         /* Game Table Area */
         .game-table-bg {
-            background: radial-gradient(circle at center, #065f46, #022c22);
-            border: 8px solid #78350f;
-            border-radius: 40px;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.5), 0 10px 30px rgba(0,0,0,0.8);
+            background: radial-gradient(circle at center, #075e3a, #012b1a);
+            border: 12px solid #5c2c16;
+            border-radius: 50px;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.8), 0 15px 40px rgba(0,0,0,0.9);
         }
 
         /* Scrollbar */
@@ -115,7 +120,6 @@
     <script>
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'binyaz-hokm-app';
     </script>
-
 </head>
 <body>
     <div id="root" class="h-screen w-screen relative"></div>
@@ -123,16 +127,16 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback } = React;
 
-        // --- CONSTANTS & MOCK DATA ---
         const ADMIN_USER = "amirbinyaz";
         const ADMIN_PASS = "09178458526amirpc";
         
         const SUITS = {
-            '♠': { color: 'black', icon: '♠', name: 'پیک' },
-            '♥': { color: 'red', icon: '♥', name: 'دل' },
-            '♣': { color: 'black', icon: '♣', name: 'خاج' },
-            '♦': { color: 'red', icon: '♦', name: 'خشت' }
+            '♠': { color: 'black', icon: '♠', name: 'پیک', class: 'text-slate-900' },
+            '♥': { color: 'red', icon: '♥', name: 'دل', class: 'text-red-600' },
+            '♣': { color: 'black', icon: '♣', name: 'خاج', class: 'text-emerald-900' },
+            '♦': { color: 'red', icon: '♦', name: 'خشت', class: 'text-red-500' }
         };
+        const SUIT_LIST = ['♠', '♥', '♣', '♦'];
         const VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
         
         const FAKE_PLAYERS = [
@@ -141,7 +145,34 @@
             { name: "PersianCat", wins: 72 }, { name: "Mhmd_Gamer", wins: 60 }
         ];
 
-        // --- HELPER COMPONENTS ---
+        const playSound = (type) => {
+            try {
+                const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+                synth.volume.value = -12;
+                if (type === 'deal') {
+                    synth.triggerAttackRelease("C5", "16n");
+                } else if (type === 'play') {
+                    synth.triggerAttackRelease("E5", "16n");
+                } else if (type === 'win') {
+                    const now = Tone.now();
+                    synth.triggerAttackRelease("G4", "8n", now);
+                    synth.triggerAttackRelease("C5", "8n", now + 0.1);
+                    synth.triggerAttackRelease("E5", "4n", now + 0.2);
+                } else if (type === 'lose') {
+                    const now = Tone.now();
+                    synth.triggerAttackRelease("E4", "8n", now);
+                    synth.triggerAttackRelease("C4", "4n", now + 0.15);
+                } else if (type === 'fanfare') {
+                    const now = Tone.now();
+                    synth.triggerAttackRelease("C5", "8n", now);
+                    synth.triggerAttackRelease("E5", "8n", now + 0.1);
+                    synth.triggerAttackRelease("G5", "8n", now + 0.2);
+                    synth.triggerAttackRelease("C6", "4n", now + 0.3);
+                }
+            } catch (e) {
+                console.log("Audio not allowed yet", e);
+            }
+        };
 
         const Toast = ({ message, type, onClose }) => {
             useEffect(() => {
@@ -186,10 +217,10 @@
         };
 
         const PlayingCard = ({ card, onClick, disabled, className = "" }) => {
-            if (!card) return <div className={`playing-card bg-slate-800 border-slate-700 ${className}`}></div>; // Back of card
+            if (!card) return <div className={`playing-card bg-slate-800 border-dashed border-2 border-slate-600 ${className}`}></div>;
             if (card === 'hidden') return (
-                <div className={`playing-card bg-gradient-to-br from-blue-800 to-blue-900 border-2 border-white flex items-center justify-center ${className}`}>
-                    <i className="fas fa-crown text-white/30 text-2xl"></i>
+                <div className={`playing-card bg-gradient-to-br from-indigo-800 to-slate-900 border-2 border-slate-700 flex items-center justify-center ${className}`}>
+                    <i className="fas fa-crown text-amber-500/30 text-2xl"></i>
                 </div>
             );
 
@@ -199,23 +230,22 @@
             return (
                 <div 
                     onClick={() => !disabled && onClick && onClick(card)}
-                    className={`playing-card ${isRed ? 'red' : 'black'} ${disabled ? 'opacity-75 cursor-not-allowed disabled' : ''} ${className}`}
+                    className={`playing-card ${isRed ? 'red' : 'black'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
                 >
                     <div className="card-top">
                         <div>{card.value}</div>
-                        <div className="text-sm">{suitData.icon}</div>
+                        <div className="text-xs">{suitData.icon}</div>
                     </div>
                     <div className="card-center">{suitData.icon}</div>
                     <div className="card-bottom">
                         <div>{card.value}</div>
-                        <div className="text-sm">{suitData.icon}</div>
+                        <div className="text-xs">{suitData.icon}</div>
                     </div>
                 </div>
             );
         };
 
         const App = () => {
-            // App State
             const [view, setView] = useState('intro'); // intro, auth, lobby, table_setup, game, admin
             const [user, setUser] = useState(null); // { username, coins, wins, isAdmin }
             const [fbUser, setFbUser] = useState(null); // Firebase Auth User
@@ -227,7 +257,7 @@
             });
             const [toast, setToast] = useState(null);
             const [globalAd, setGlobalAd] = useState({
-                text: "✨ جشنواره تابستانه با جوایز ویژه! ✨",
+                text: "✨ پلتفرم رسمی سرگرمی و بازی سنتی حکم بی‌نیاز ✨",
                 link: "https://t.me/PoshtibaniDinoBot"
             });
             const [gameConfig, setGameConfig] = useState(null); // Settings passed to game
@@ -241,7 +271,7 @@
                     try {
                         const configStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
                         const config = JSON.parse(configStr);
-                        if (Object.keys(config).length === 0) return; // Prevent error if no config in env
+                        if (Object.keys(config).length === 0) return;
                         
                         const app = initializeApp(config);
                         const auth = getAuth(app);
@@ -261,7 +291,6 @@
                 return () => window.removeEventListener('firebaseLoaded', initFb);
             }, []);
 
-            // Handle Persisting Data
             useEffect(() => {
                 localStorage.setItem('binyaz_users', JSON.stringify(registeredUsers));
             }, [registeredUsers]);
@@ -272,7 +301,6 @@
                 }
             }, [user]);
 
-            // Handle Intro Timeout & Auto Login
             useEffect(() => {
                 if (view === 'intro') {
                     const timer = setTimeout(() => {
@@ -292,21 +320,21 @@
                         } else {
                             setView('auth');
                         }
-                    }, 3500);
+                    }, 3000);
                     return () => clearTimeout(timer);
                 }
             }, [view]);
 
-            // Global State Updaters
             const updateCoins = (amount) => {
                 if (user) {
                     setUser(prev => {
-                        const updatedUser = { ...prev, coins: prev.coins + amount };
+                        const updatedUser = { ...prev, coins: Math.max(0, prev.coins + amount) };
                         setRegisteredUsers(users => users.map(u => u.username === updatedUser.username ? updatedUser : u));
                         return updatedUser;
                     });
                 }
             };
+
             const updateWins = () => {
                 if (user) {
                     setUser(prev => {
@@ -318,7 +346,7 @@
             };
 
             return (
-                <div className="w-full h-full flex flex-col items-center justify-center">
+                <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950 overflow-hidden">
                     {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
                     
                     {view === 'intro' && <IntroScreen />}
@@ -339,11 +367,11 @@
                 <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter drop-shadow-2xl">
                     بی‌نیاز <span className="text-amber-400">حکم</span>
                 </h1>
-                <p className="text-xl text-slate-300 tracking-widest mt-4">BINYAZ HOKM</p>
-                <div className="mt-10 flex space-x-2 space-x-reverse">
-                    <div className="w-3 h-3 bg-amber-400 rounded-full animate-bounce" style={{animationDelay: '0s'}}></div>
-                    <div className="w-3 h-3 bg-amber-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                    <div className="w-3 h-3 bg-amber-400 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></div>
+                <p className="text-xl text-slate-400 tracking-widest mt-4">BINYAZ HOKM ONLINE</p>
+                <div className="mt-10 flex space-x-2 space-x-reverse justify-center">
+                    <div className="w-3.5 h-3.5 bg-amber-400 rounded-full animate-bounce" style={{animationDelay: '0s'}}></div>
+                    <div className="w-3.5 h-3.5 bg-amber-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                    <div className="w-3.5 h-3.5 bg-amber-400 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></div>
                 </div>
             </div>
         );
@@ -354,22 +382,20 @@
 
             const handleLogin = (e) => {
                 e.preventDefault();
-                if (!username || !password) {
+                if (!username.trim() || !password) {
                     showToast('لطفاً نام کاربری و رمز عبور را وارد کنید.', 'warning');
                     return;
                 }
 
                 if (username === ADMIN_USER && password === ADMIN_PASS) {
-                    setUser({ username, isAdmin: true, coins: 999999, wins: 0 });
+                    setUser({ username, isAdmin: true, coins: 999999, wins: 1300 });
                     showToast('ورود مدیر موفقیت آمیز بود.', 'success');
                     setView('admin');
                     return;
                 }
 
                 const deviceRegistered = localStorage.getItem('device_registered');
-
-                // بررسی وجود نام کاربری از قبل
-                const existingUser = registeredUsers.find(u => u.username === username);
+                const existingUser = registeredUsers.find(u => u.username.toLowerCase() === username.toLowerCase().trim());
                 
                 if (existingUser) {
                     if (existingUser.password === password) {
@@ -384,7 +410,7 @@
                         showToast('دستگاه شما قبلاً در سیستم ثبت شده است. لطفاً با حساب کاربری خود وارد شوید.', 'error');
                         return;
                     }
-                    const newUser = { username, password, isAdmin: false, coins: 500, wins: 0 };
+                    const newUser = { username: username.trim(), password, isAdmin: false, coins: 500, wins: 0 };
                     setRegisteredUsers([...registeredUsers, newUser]);
                     localStorage.setItem('device_registered', 'true');
                     setUser(newUser);
@@ -396,7 +422,6 @@
             return (
                 <div className="w-full max-w-md p-6">
                     <div className="glass-panel rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-                        {/* Decorative background blur */}
                         <div className="absolute -top-20 -right-20 w-40 h-40 bg-amber-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
                         <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
                         
@@ -439,7 +464,7 @@
                             </div>
                             <button 
                                 type="submit"
-                                className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold text-lg py-3 px-4 rounded-xl shadow-lg transform transition hover:scale-105 active:scale-95"
+                                className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold text-lg py-3 px-4 rounded-xl shadow-lg transform transition hover:scale-[1.02] active:scale-95"
                             >
                                 ورود به بازی
                             </button>
@@ -453,7 +478,6 @@
             const [onlineCount, setOnlineCount] = useState(1243);
             const [leaderboard, setLeaderboard] = useState([]);
 
-            // Simulate online count fluctuation
             useEffect(() => {
                 const interval = setInterval(() => {
                     setOnlineCount(prev => prev + Math.floor(Math.random() * 11) - 5);
@@ -461,19 +485,17 @@
                 return () => clearInterval(interval);
             }, []);
 
-            // Generate Leaderboard
             useEffect(() => {
                 let currentLB = [...FAKE_PLAYERS];
                 if (user && user.wins > 0) {
                     currentLB.push({ name: user.username + " (شما)", wins: user.wins });
                 }
                 currentLB.sort((a, b) => b.wins - a.wins);
-                setLeaderboard(currentLB.slice(0, 10)); // Top 10
+                setLeaderboard(currentLB.slice(0, 10));
             }, [user.wins]);
 
             return (
                 <div className="w-full h-full flex flex-col bg-slate-900 overflow-y-auto relative pb-20">
-                    {/* Header Info */}
                     <div className="bg-slate-800/80 backdrop-blur-md sticky top-0 z-20 border-b border-slate-700 p-4 flex justify-between items-center shadow-md">
                         <div className="flex items-center gap-3">
                             <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-xl font-bold border-2 border-indigo-400 shadow-lg">
@@ -482,11 +504,11 @@
                             <div>
                                 <h2 className="font-bold text-lg leading-tight">{user.username}</h2>
                                 <p className="text-amber-400 font-bold text-sm flex items-center gap-1">
-                                    <i className="fas fa-coins"></i> {user.coins.toLocaleString()}
+                                    <i className="fas fa-coins"></i> {user.coins.toLocaleString()} سکه
                                 </p>
                             </div>
                         </div>
-                        <div className="text-left">
+                        <div className="text-left flex flex-col items-end">
                             <div className="text-emerald-400 text-sm font-bold flex items-center gap-2 justify-end">
                                 <span className="relative flex h-3 w-3">
                                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -495,46 +517,43 @@
                                 {onlineCount.toLocaleString()} آنلاین
                             </div>
                             {user.isAdmin && (
-                                <button onClick={() => setView('admin')} className="text-xs text-slate-400 underline mt-1">پنل مدیریت</button>
+                                <button onClick={() => setView('admin')} className="text-xs text-amber-400 underline mt-1">پنل مدیریت</button>
                             )}
                         </div>
                     </div>
 
                     <div className="p-4 space-y-6 max-w-4xl mx-auto w-full flex-grow">
-                        {/* Ad Banner Top */}
                         <div className="w-full bg-gradient-to-r from-purple-900 to-indigo-900 rounded-2xl p-4 text-center shadow-lg border border-purple-500/30 overflow-hidden relative">
                             <div className="absolute top-0 right-0 bg-yellow-500 text-slate-900 text-[10px] font-bold px-2 py-1 rounded-bl-lg">تبلیغات</div>
                             <a href={globalAd.link} target="_blank" rel="noreferrer" className="text-white font-bold block hover:text-amber-300 transition">{globalAd.text}</a>
                         </div>
 
-                        {/* Play Actions */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <button 
                                 onClick={() => setView('table_setup')}
-                                className="glass-panel p-6 rounded-3xl border border-amber-500/50 hover:bg-slate-800 transition transform hover:-translate-y-1 group relative overflow-hidden"
+                                className="glass-panel p-6 rounded-3xl border border-amber-500/50 hover:bg-slate-800 transition transform hover:-translate-y-1 group relative overflow-hidden text-right"
                             >
                                 <div className="absolute inset-0 bg-amber-500/10 group-hover:bg-amber-500/20 transition"></div>
-                                <i className="fas fa-play-circle text-5xl text-amber-500 mb-4 drop-shadow-md group-hover:scale-110 transition"></i>
+                                <i className="fas fa-play-circle text-5xl text-amber-500 mb-4 drop-shadow-md group-hover:scale-110 transition block"></i>
                                 <h3 className="text-2xl font-black mb-2">شروع بازی</h3>
-                                <p className="text-slate-400 text-sm">ساخت میز اختصاصی یا ورود به میز دوستان</p>
+                                <p className="text-slate-400 text-sm">ساخت میز دونفره/چهارنفره آنلاین یا بازی با هوش مصنوعی</p>
                             </button>
                             
                             <a 
                                 href="https://t.me/PoshtibaniDinoBot" target="_blank" rel="noreferrer"
-                                className="glass-panel p-6 rounded-3xl border border-blue-500/50 hover:bg-slate-800 transition transform hover:-translate-y-1 group relative overflow-hidden block text-center"
+                                className="glass-panel p-6 rounded-3xl border border-blue-500/50 hover:bg-slate-800 transition transform hover:-translate-y-1 group relative overflow-hidden block text-right"
                             >
                                 <div className="absolute inset-0 bg-blue-500/10 group-hover:bg-blue-500/20 transition"></div>
-                                <i className="fab fa-telegram text-5xl text-blue-400 mb-4 drop-shadow-md group-hover:scale-110 transition"></i>
+                                <i className="fab fa-telegram text-5xl text-blue-400 mb-4 drop-shadow-md group-hover:scale-110 transition block"></i>
                                 <h3 className="text-2xl font-black mb-2">ارتباط با ما</h3>
-                                <p className="text-slate-400 text-sm">پشتیبانی و ارتباط در تلگرام</p>
+                                <p className="text-slate-400 text-sm">پشتیبانی تلگرام و گزارش مشکلات فنی</p>
                             </a>
                         </div>
 
-                        {/* Leaderboard */}
                         <div className="glass-panel rounded-3xl p-6">
                             <div className="flex items-center gap-3 mb-6 border-b border-slate-700 pb-4">
                                 <i className="fas fa-trophy text-2xl text-amber-400"></i>
-                                <h3 className="text-xl font-bold">برترین‌های امروز</h3>
+                                <h3 className="text-xl font-bold">برترین‌های حکم بی‌نیاز</h3>
                             </div>
                             <div className="space-y-3">
                                 {leaderboard.map((p, index) => (
@@ -556,584 +575,944 @@
         };
 
         const TableSetupScreen = ({ setView, setGameConfig, showToast, user, fbUser }) => {
-            const [mode, setMode] = useState('create'); // create, join
-            const [playersCount, setPlayersCount] = useState(2); // 2 or 4
+            const [mode, setMode] = useState('offline'); // offline, create, join
+            const [playersCount, setPlayersCount] = useState(4); // Only 4 is standard for offline simulation
             const [tableId, setTableId] = useState('');
             const [tablePass, setTablePass] = useState('');
             const [isLoading, setIsLoading] = useState(false);
 
             const handleAction = async () => {
+                if (mode === 'offline') {
+                    setGameConfig({ isOffline: true, playersCount: 4, mySlot: 'p1' });
+                    setView('game');
+                    return;
+                }
+
                 if (!tableId || !/^\d+$/.test(tableId)) {
                     showToast('شناسه میز باید فقط شامل اعداد باشد.', 'error');
                     return;
                 }
+
                 if (!fbUser || !window.firebaseDb) {
                     showToast('در حال اتصال به سرور ابری، لطفاً چند لحظه دیگر تلاش کنید.', 'warning');
                     return;
                 }
                 
                 setIsLoading(true);
-                const { collection, getDocs, doc, setDoc, updateDoc } = window.fb;
+                const { doc, setDoc, getDoc, updateDoc, onSnapshot } = window.fb;
                 const db = window.firebaseDb;
 
                 try {
                     if (mode === 'create') {
                         const newTable = {
-                            id: tableId, password: tablePass, playersCount,
+                            id: tableId, 
+                            password: tablePass, 
+                            playersCount: 4,
                             hostUid: fbUser.uid,
-                            players: { p1: { uid: fbUser.uid, username: user.username }, p2: null, p3: null, p4: null },
-                            phase: 'waiting', turn: 'p1', hokm: null,
+                            players: { 
+                                p1: { uid: fbUser.uid, username: user.username }, 
+                                p2: null, 
+                                p3: null, 
+                                p4: null 
+                            },
+                            phase: 'waiting', // waiting, select_hokm, playing, round_finished, match_finished
+                            turn: 'p1', 
+                            hokm: null,
+                            ruler: 'p1', // Host is initially Ruler
                             hands: { p1: [], p2: [], p3: [], p4: [] },
-                            deckRemaining: [],
-                            tableCards: [], scores: { team1: 0, team2: 0 }, leadSuit: null
+                            tableCards: {}, // slot: card
+                            scores: { team1: 0, team2: 0 }, // match score (rands)
+                            tricks: { team1: 0, team2: 0 }, // current hand tricks
+                            leadSuit: null,
+                            remainingDeck: []
                         };
                         
                         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tables', tableId), newTable);
-                        showToast('میز ساخته شد! منتظر بازیکنان باشید...', 'success');
-                        setGameConfig({ tableId, isHost: true, mySlot: 'p1' });
+                        showToast('میز آنلاین با موفقیت ساخته شد!', 'success');
+                        setGameConfig({ tableId, isOffline: false, isHost: true, mySlot: 'p1' });
                         setView('game');
                     } else {
-                        // Join
-                        const snapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'tables'));
-                        const tables = snapshot.docs.map(d => ({ docId: d.id, ...d.data() }));
-                        const table = tables.find(t => t.id === tableId && t.password === tablePass);
+                        const tableRef = doc(db, 'artifacts', appId, 'public', 'data', 'tables', tableId);
+                        const tableSnap = await getDoc(tableRef);
                         
-                        if (!table) {
-                            showToast('میز یافت نشد یا رمز عبور اشتباه است.', 'error');
+                        if (!tableSnap.exists()) {
+                            showToast('میزی با این شناسه یافت نشد.', 'error');
                             setIsLoading(false);
                             return;
                         }
-                        
-                        // Find an empty slot
-                        let mySlot = null;
-                        if (!table.players.p2) mySlot = 'p2';
-                        else if (!table.players.p3) mySlot = 'p3';
-                        else if (!table.players.p4) mySlot = 'p4';
-                        
-                        if (!mySlot) {
-                            showToast('این میز پر است.', 'error');
+
+                        const tData = tableSnap.data();
+                        if (tData.password && tData.password !== tablePass) {
+                            showToast('رمز عبور میز اشتباه است.', 'error');
                             setIsLoading(false);
                             return;
                         }
-                        
-                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tables', table.docId), {
-                            [`players.${mySlot}`]: { uid: fbUser.uid, username: user.username }
-                        });
-                        
-                        showToast('با موفقیت به میز متصل شدید!', 'success');
-                        setGameConfig({ tableId: table.docId, isHost: false, mySlot });
+
+                        // Find free slot
+                        let chosenSlot = null;
+                        const slots = ['p2', 'p3', 'p4'];
+                        for (const s of slots) {
+                            if (!tData.players[s]) {
+                                chosenSlot = s;
+                                break;
+                            }
+                        }
+
+                        if (!chosenSlot) {
+                            showToast('این میز در حال حاضر پر است.', 'warning');
+                            setIsLoading(false);
+                            return;
+                        }
+
+                        // Update table players in firestore
+                        const updatedPlayers = { ...tData.players };
+                        updatedPlayers[chosenSlot] = { uid: fbUser.uid, username: user.username };
+                        await updateDoc(tableRef, { players: updatedPlayers });
+
+                        showToast(`با موفقیت به عنوان بازیکن ${chosenSlot.replace('p', 'یار ')} وارد میز شدید`, 'success');
+                        setGameConfig({ tableId, isOffline: false, isHost: false, mySlot: chosenSlot });
                         setView('game');
                     }
                 } catch (e) {
-                    showToast('خطا در برقراری ارتباط با سرور ابری.', 'error');
-                    console.error(e);
+                    console.error("Cloud Error: ", e);
+                    showToast('خطا در انجام عملیات شبکه.', 'error');
+                } finally {
+                    setIsLoading(false);
                 }
-                setIsLoading(false);
             };
 
             return (
-                <div className="w-full h-full flex items-center justify-center p-4 relative">
-                    {/* Back Button */}
-                    <button onClick={() => setView('lobby')} className="absolute top-6 right-6 text-white text-xl z-10 w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center hover:bg-slate-700">
-                        <i className="fas fa-arrow-right"></i>
-                    </button>
+                <div className="w-full max-w-md p-4">
+                    <div className="glass-panel rounded-3xl p-6 shadow-2xl space-y-6">
+                        <div className="flex justify-between items-center border-b border-slate-700 pb-4">
+                            <button onClick={() => setView('lobby')} className="text-slate-400 hover:text-white">
+                                <i className="fas fa-arrow-right text-xl"></i>
+                            </button>
+                            <h2 className="text-2xl font-black">پیکربندی بازی</h2>
+                            <i className="fas fa-gamepad text-amber-400 text-2xl"></i>
+                        </div>
 
-                    <div className="glass-panel w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
-                        {/* Tabs */}
-                        <div className="flex border-b border-slate-700">
+                        <div className="flex bg-slate-800 rounded-xl p-1">
+                            <button 
+                                onClick={() => setMode('offline')}
+                                className={`flex-1 py-2 rounded-lg font-bold text-sm transition ${mode === 'offline' ? 'bg-amber-500 text-slate-900' : 'text-slate-400 hover:text-white'}`}
+                            >
+                                <i className="fas fa-robot ml-1"></i> بازی با ربات‌ها
+                            </button>
                             <button 
                                 onClick={() => setMode('create')}
-                                className={`flex-1 py-4 font-bold text-lg transition ${mode === 'create' ? 'bg-amber-500/20 text-amber-400 border-b-2 border-amber-500' : 'text-slate-400 hover:bg-slate-800'}`}
+                                className={`flex-1 py-2 rounded-lg font-bold text-sm transition ${mode === 'create' ? 'bg-amber-500 text-slate-900' : 'text-slate-400 hover:text-white'}`}
                             >
-                                ساخت میز
+                                <i className="fas fa-plus ml-1"></i> ساخت میز آنلاین
                             </button>
                             <button 
                                 onClick={() => setMode('join')}
-                                className={`flex-1 py-4 font-bold text-lg transition ${mode === 'join' ? 'bg-amber-500/20 text-amber-400 border-b-2 border-amber-500' : 'text-slate-400 hover:bg-slate-800'}`}
+                                className={`flex-1 py-2 rounded-lg font-bold text-sm transition ${mode === 'join' ? 'bg-amber-500 text-slate-900' : 'text-slate-400 hover:text-white'}`}
                             >
-                                ورود به میز
+                                <i className="fas fa-sign-in-alt ml-1"></i> ورود به میز
                             </button>
                         </div>
 
-                        <div className="p-6 space-y-6">
-                            {mode === 'create' && (
+                        {mode === 'offline' ? (
+                            <div className="p-4 bg-slate-800/40 rounded-2xl border border-slate-700/50 space-y-4 text-center">
+                                <i className="fas fa-user-friends text-4xl text-amber-400 mb-2"></i>
+                                <h3 className="font-bold text-lg text-white">بازی تک‌نفره با هوش مصنوعی</h3>
+                                <p className="text-slate-400 text-xs leading-relaxed">
+                                    در این حالت، شما با ۳ ربات هوشمند به رقابت می‌پردازید. این حالت بدون نیاز به اتصال اینترنت دائم و فوری اجرا می‌شود.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
                                 <div>
-                                    <label className="block text-slate-300 text-sm font-bold mb-3">تعداد بازیکنان</label>
-                                    <div className="flex gap-4">
-                                        <button 
-                                            onClick={() => setPlayersCount(2)}
-                                            className={`flex-1 py-3 rounded-xl border-2 font-bold transition flex items-center justify-center gap-2 ${playersCount === 2 ? 'border-amber-500 bg-amber-500/10 text-white' : 'border-slate-600 text-slate-400 hover:border-slate-500'}`}
-                                        >
-                                            <i className="fas fa-user-friends"></i> ۲ نفره
-                                        </button>
-                                        <button 
-                                            onClick={() => setPlayersCount(4)}
-                                            className={`flex-1 py-3 rounded-xl border-2 font-bold transition flex items-center justify-center gap-2 ${playersCount === 4 ? 'border-amber-500 bg-amber-500/10 text-white' : 'border-slate-600 text-slate-400 hover:border-slate-500'}`}
-                                        >
-                                            <i className="fas fa-users"></i> ۴ نفره
-                                        </button>
-                                    </div>
-                                    <p className="text-xs text-amber-400 mt-2">* بازی ۴ نفره در حال حاضر با ربات‌های هوشمند اجرا می‌شود.</p>
+                                    <label className="block text-slate-400 text-xs font-bold mb-2">شناسه عددی میز</label>
+                                    <input 
+                                        type="text" 
+                                        value={tableId}
+                                        onChange={(e) => setTableId(e.target.value.replace(/\D/g, ''))}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-amber-500 text-center text-lg font-black tracking-widest"
+                                        placeholder="مثال: 12345"
+                                    />
                                 </div>
+                                <div>
+                                    <label className="block text-slate-400 text-xs font-bold mb-2">رمز عبور میز (اختیاری)</label>
+                                    <input 
+                                        type="password" 
+                                        value={tablePass}
+                                        onChange={(e) => setTablePass(e.target.value)}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-amber-500 text-center"
+                                        placeholder="••••"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        <button 
+                            onClick={handleAction}
+                            disabled={isLoading}
+                            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2"
+                        >
+                            {isLoading ? (
+                                <i className="fas fa-spinner animate-spin"></i>
+                            ) : (
+                                <>
+                                    <span>تایید و شروع</span>
+                                    <i className="fas fa-arrow-left"></i>
+                                </>
                             )}
-
-                            <div>
-                                <label className="block text-slate-300 text-sm font-bold mb-2">شناسه میز (فقط عدد)</label>
-                                <input 
-                                    type="text" pattern="\d*"
-                                    value={tableId} onChange={(e) => setTableId(e.target.value.replace(/\D/g,''))}
-                                    className="w-full bg-slate-900 border border-slate-600 rounded-xl py-3 px-4 text-center tracking-widest text-xl text-white focus:border-amber-400 focus:outline-none"
-                                    placeholder="مثلاً 1234"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-slate-300 text-sm font-bold mb-2">رمز عبور میز (اختیاری)</label>
-                                <input 
-                                    type="password"
-                                    value={tablePass} onChange={(e) => setTablePass(e.target.value)}
-                                    className="w-full bg-slate-900 border border-slate-600 rounded-xl py-3 px-4 text-center text-white focus:border-amber-400 focus:outline-none"
-                                    placeholder="رمز عبور"
-                                />
-                            </div>
-
-                            <button 
-                                onClick={handleAction}
-                                disabled={isLoading}
-                                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-900 font-black text-lg py-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2"
-                            >
-                                {isLoading ? <i className="fas fa-spinner fa-spin"></i> : (mode === 'create' ? 'ساخت میز آنلاین' : 'ورود به میز')}
-                            </button>
-                        </div>
+                        </button>
                     </div>
                 </div>
             );
         };
 
-        const getShuffledDeck = () => {
-            let deck = [];
-            for (let suit in SUITS) {
-                for (let i = 0; i < VALUES.length; i++) {
-                    deck.push({ suit, value: VALUES[i], weight: i });
-                }
-            }
-            return deck.sort(() => Math.random() - 0.5);
-        };
-
-        const sortHand = (hand) => {
-            return [...hand].sort((a, b) => {
-                if (a.suit !== b.suit) return a.suit.localeCompare(b.suit);
-                return b.weight - a.weight;
-            });
-        };
-
         const GameScreen = ({ user, config, setView, updateCoins, updateWins, globalAd, showToast, fbUser }) => {
-            const { tableId, isHost, mySlot } = config;
-            const [tableData, setTableData] = useState(null);
+            const [gameState, setGameState] = useState({
+                players: { p1: { username: user.username }, p2: { username: "ربات ۱ (چپ)" }, p3: { username: "ربات ۲ (یار)" }, p4: { username: "ربات ۳ (راست)" } },
+                phase: 'waiting', // waiting, dealing_first, select_hokm, playing, round_finished, match_finished
+                turn: 'p1',
+                ruler: 'p1',
+                hokm: null,
+                hands: { p1: [], p2: [], p3: [], p4: [] },
+                tableCards: {}, // slot -> card
+                scores: { team1: 0, team2: 0 },
+                tricks: { team1: 0, team2: 0 },
+                leadSuit: null
+            });
 
-            // Connect to Real-time DB
+            const isOffline = config.isOffline;
+            const mySlot = config.mySlot || 'p1';
+            const tableId = config.tableId;
+
+            // Generate full deck
+            const createDeck = () => {
+                const deck = [];
+                for (const suit of SUIT_LIST) {
+                    for (const value of VALUES) {
+                        let score = VALUES.indexOf(value) + 2;
+                        deck.push({ suit, value, score });
+                    }
+                }
+                return deck;
+            };
+
+            // Shuffle Deck
+            const shuffle = (deck) => {
+                const shuffled = [...deck];
+                for (let i = shuffled.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                }
+                return shuffled;
+            };
+
+            // Initialize local offline game
+            const initOfflineGame = () => {
+                const deck = shuffle(createDeck());
+                
+                // First 5 cards to everyone to decide Hokm
+                const p1Hand = deck.slice(0, 5);
+                const p2Hand = deck.slice(5, 10);
+                const p3Hand = deck.slice(10, 15);
+                const p4Hand = deck.slice(15, 20);
+                
+                const remainingDeck = deck.slice(20);
+
+                playSound('deal');
+
+                setGameState(prev => ({
+                    ...prev,
+                    players: { 
+                        p1: { username: user.username }, 
+                        p2: { username: "ربات چپ" }, 
+                        p3: { username: "ربات یار (هم تیمی)" }, 
+                        p4: { username: "ربات راست" } 
+                    },
+                    phase: 'select_hokm',
+                    turn: 'p1', // In offline, user is always ruler first
+                    ruler: 'p1',
+                    hokm: null,
+                    hands: { p1: p1Hand, p2: p2Hand, p3: p3Hand, p4: p4Hand },
+                    tableCards: {},
+                    tricks: { team1: 0, team2: 0 },
+                    leadSuit: null,
+                    remainingDeck: remainingDeck
+                }));
+            };
+
             useEffect(() => {
-                if (!fbUser || !window.firebaseDb) return;
-                const { doc, onSnapshot } = window.fb;
-                const db = window.firebaseDb;
-
-                const unsub = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'tables', tableId), 
-                    (docSnap) => {
-                        if (docSnap.exists()) {
-                            setTableData(docSnap.data());
+                if (isOffline) {
+                    initOfflineGame();
+                } else {
+                    // Firebase Realtime Listener
+                    if (!window.firebaseDb || !fbUser) return;
+                    const { doc, onSnapshot } = window.fb;
+                    const db = window.firebaseDb;
+                    
+                    console.log("Listening to table:", tableId);
+                    const unsubscribe = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'tables', tableId), (snapshot) => {
+                        if (snapshot.exists()) {
+                            const data = snapshot.data();
+                            console.log("Table data received:", data);
+                            setGameState(data);
+                            
+                            // Host processes logic transitions
+                            if (config.isHost) {
+                                processOnlineHostLogic(data);
+                            }
                         } else {
-                            showToast('این میز بسته شده است.', 'error');
+                            console.warn("Table does not exist");
+                            showToast("میز یافت نشد یا بسته شده است.", "error");
                             setView('lobby');
                         }
-                    }, 
-                    (err) => {
-                        console.error("Firestore listen error", err);
-                        showToast('اتصال با سرور قطع شد.', 'error');
-                    }
-                );
-                return () => unsub();
-            }, [tableId, fbUser, setView, showToast]);
+                    }, (err) => {
+                        console.error("Firestore Listen error: ", err);
+                    });
 
-            // Host Actions: Start Game
-            const startGame = async () => {
-                if (!isHost) return;
-                const deck = getShuffledDeck();
-                const p1Initial = sortHand(deck.slice(0, 5));
-                const remaining = deck.slice(5);
-                
+                    return () => unsubscribe();
+                }
+            }, [isOffline, tableId, config.isHost]);
+
+            const processOnlineHostLogic = async (currentData) => {
                 const { doc, updateDoc } = window.fb;
-                await updateDoc(doc(window.firebaseDb, 'artifacts', appId, 'public', 'data', 'tables', tableId), {
-                    phase: 'setting_hokm',
-                    deckRemaining: remaining,
-                    'hands.p1': p1Initial
-                });
-                showToast('شما حاکم هستید. حکم را تعیین کنید.', 'info');
+                const db = window.firebaseDb;
+                const tableRef = doc(db, 'artifacts', appId, 'public', 'data', 'tables', tableId);
+
+                // Auto Start Game when 4 players are present
+                if (currentData.phase === 'waiting') {
+                    const allPresent = currentData.players.p1 && currentData.players.p2 && currentData.players.p3 && currentData.players.p4;
+                    if (allPresent) {
+                        console.log("All players present, starting game...");
+                        // Start standard deal
+                        const deck = shuffle(createDeck());
+                        const p1Hand = deck.slice(0, 5);
+                        const p2Hand = deck.slice(5, 10);
+                        const p3Hand = deck.slice(10, 15);
+                        const p4Hand = deck.slice(15, 20);
+                        const remainingDeck = deck.slice(20);
+
+                        await updateDoc(tableRef, {
+                            phase: 'select_hokm',
+                            hands: { p1: p1Hand, p2: p2Hand, p3: p3Hand, p4: p4Hand },
+                            remainingDeck: remainingDeck,
+                            turn: currentData.ruler || 'p1',
+                            hokm: null
+                        });
+                        playSound('deal');
+                    }
+                }
             };
 
-            const handleSetHokm = async (suit) => {
-                if (!isHost || tableData?.phase !== 'setting_hokm') return;
-                
-                let currentRemaining = [...tableData.deckRemaining];
-                const p1Rest = currentRemaining.splice(0, 8);
-                const p2Cards = currentRemaining.splice(0, 13);
-                const p3Cards = currentRemaining.splice(0, 13);
-                const p4Cards = currentRemaining.splice(0, 13);
+            // Trigger remainder of deal once Hokm is chosen
+            const distributeRemainingCards = (selectedHokm, deck) => {
+                let d = [...deck];
+                const p1Extra = d.slice(0, 8);
+                const p2Extra = d.slice(8, 16);
+                const p3Extra = d.slice(16, 24);
+                const p4Extra = d.slice(24, 32);
 
-                const newHands = {
-                    p1: sortHand([...tableData.hands.p1, ...p1Rest]),
-                    p2: sortHand(p2Cards),
-                    p3: sortHand(p3Cards),
-                    p4: sortHand(p4Cards)
+                setGameState(prev => {
+                    const updated = {
+                        ...prev,
+                        hokm: selectedHokm,
+                        phase: 'playing',
+                        hands: {
+                            p1: [...prev.hands.p1, ...p1Extra],
+                            p2: [...prev.hands.p2, ...p2Extra],
+                            p3: [...prev.hands.p3, ...p3Extra],
+                            p4: [...prev.hands.p4, ...p4Extra]
+                        },
+                        turn: prev.ruler
+                    };
+                    return updated;
+                });
+                playSound('fanfare');
+            };
+
+            const selectHokmOnline = async (suit) => {
+                const { doc, updateDoc } = window.fb;
+                const db = window.firebaseDb;
+                const tableRef = doc(db, 'artifacts', appId, 'public', 'data', 'tables', tableId);
+
+                let d = [...gameState.remainingDeck];
+                const p1Extra = d.slice(0, 8);
+                const p2Extra = d.slice(8, 16);
+                const p3Extra = d.slice(16, 24);
+                const p4Extra = d.slice(24, 32);
+
+                await updateDoc(tableRef, {
+                    hokm: suit,
+                    phase: 'playing',
+                    hands: {
+                        p1: [...gameState.hands.p1, ...p1Extra],
+                        p2: [...gameState.hands.p2, ...p2Extra],
+                        p3: [...gameState.hands.p3, ...p3Extra],
+                        p4: [...gameState.hands.p4, ...p4Extra]
+                    },
+                    turn: gameState.ruler
+                });
+                playSound('fanfare');
+            };
+
+            const determineTrickWinner = (cards, hokm, leadSuit) => {
+                let bestPlayer = null;
+                let maxVal = -1;
+
+                Object.entries(cards).forEach(([slot, card]) => {
+                    let score = card.score;
+                    if (card.suit === hokm) {
+                        score += 100; // Hokm beats everything
+                    } else if (card.suit !== leadSuit) {
+                        score = 0; // Cut/discard without hokm has 0 value
+                    }
+
+                    if (score > maxVal) {
+                        maxVal = score;
+                        bestPlayer = slot;
+                    }
+                });
+                return bestPlayer;
+            };
+
+            const playCard = async (playerSlot, card) => {
+                if (gameState.phase !== 'playing') return;
+                if (gameState.turn !== playerSlot) return;
+
+                // Validate Rule: Must follow suit if possible
+                const playerHand = gameState.hands[playerSlot];
+                const leadSuit = gameState.leadSuit;
+
+                if (leadSuit && card.suit !== leadSuit) {
+                    const hasLeadSuit = playerHand.some(c => c.suit === leadSuit);
+                    if (hasLeadSuit) {
+                        if(playerSlot === mySlot) showToast(`باید خال زمینه (${SUITS[leadSuit].name}) بازی کنید!`, 'warning');
+                        return;
+                    }
+                }
+
+                playSound('play');
+
+                // Update Table Cards & Hand
+                const updatedHand = playerHand.filter(c => !(c.suit === card.suit && c.value === card.value));
+                const updatedTableCards = { ...gameState.tableCards, [playerSlot]: card };
+                let nextLeadSuit = leadSuit || card.suit;
+
+                const nextTurn = getNextTurnSlot(playerSlot);
+
+                // Setup tentative state
+                let newState = {
+                    ...gameState,
+                    hands: { ...gameState.hands, [playerSlot]: updatedHand },
+                    tableCards: updatedTableCards,
+                    leadSuit: nextLeadSuit,
+                    turn: nextTurn
                 };
 
-                const { doc, updateDoc } = window.fb;
-                await updateDoc(doc(window.firebaseDb, 'artifacts', appId, 'public', 'data', 'tables', tableId), {
-                    hokm: suit,
-                    hands: newHands,
-                    phase: 'playing',
-                    turn: 'p1'
-                });
-                showToast(`حکم ${SUITS[suit].name} تعیین شد. بازی شروع شد!`, 'success');
-            };
-
-            // Host AI & Trick Resolution Logic
-            useEffect(() => {
-                if (!tableData || !isHost || tableData.phase !== 'playing') return;
-                const { turn, tableCards, hands, players, leadSuit, hokm } = tableData;
-
-                // 1. Resolve Trick when 4 cards played
-                if (tableCards.length === 4) {
-                    const timer = setTimeout(async () => {
-                        let winningSuit = tableCards.some(p => p.card.suit === hokm) ? hokm : tableCards[0].card.suit;
-                        let highestVal = -1;
-                        let winner = null;
-                        
-                        tableCards.forEach(play => {
-                            if (play.card.suit === winningSuit && play.card.weight > highestVal) {
-                                highestVal = play.card.weight;
-                                winner = play.player;
-                            }
-                        });
-
-                        const isTeam1 = (winner === 'p1' || winner === 'p3');
-                        const newScores = { ...tableData.scores };
-                        newScores[isTeam1 ? 'team1' : 'team2'] += 1;
-
-                        let nextPhase = 'playing';
-                        let nextTurn = winner;
-
-                        if (newScores.team1 >= 7 || newScores.team2 >= 7) {
-                            nextPhase = 'game_over';
-                            nextTurn = null;
-                        }
-
-                        const { doc, updateDoc } = window.fb;
-                        await updateDoc(doc(window.firebaseDb, 'artifacts', appId, 'public', 'data', 'tables', tableId), {
-                            scores: newScores, tableCards: [], leadSuit: null, turn: nextTurn, phase: nextPhase
-                        });
-                    }, 1500);
-                    return () => clearTimeout(timer);
-                }
-
-                // 2. Play for AI (Missing Players)
-                if (turn && !players[turn]) {
-                    const timer = setTimeout(async () => {
-                        const aiHand = hands[turn];
-                        if (!aiHand || aiHand.length === 0) return;
-
-                        let validCards = aiHand;
-                        if (leadSuit) {
-                            const following = aiHand.filter(c => c.suit === leadSuit);
-                            if (following.length > 0) validCards = following;
-                        }
-
-                        const playedCard = validCards[Math.floor(Math.random() * validCards.length)];
-                        const newHand = aiHand.filter(c => c.suit !== playedCard.suit || c.value !== playedCard.value);
-                        const newTableCards = [...tableCards, { player: turn, card: playedCard }];
-                        
-                        const nextOrder = ['p1', 'p2', 'p3', 'p4'];
-                        let nextTurn = nextOrder[(nextOrder.indexOf(turn) + 1) % 4];
-                        if (newTableCards.length === 4) nextTurn = null;
-
-                        let updateObj = { [`hands.${turn}`]: newHand, tableCards: newTableCards, turn: nextTurn };
-                        if (newTableCards.length === 1) updateObj.leadSuit = playedCard.suit;
-
-                        const { doc, updateDoc } = window.fb;
-                        await updateDoc(doc(window.firebaseDb, 'artifacts', appId, 'public', 'data', 'tables', tableId), updateObj);
-                    }, 1200);
-                    return () => clearTimeout(timer);
-                }
-            }, [tableData, isHost]);
-
-            // Check game over rewards locally for each player
-            useEffect(() => {
-                if (tableData?.phase === 'game_over') {
-                    const isTeam1 = (mySlot === 'p1' || mySlot === 'p3');
-                    const myTeamScore = isTeam1 ? tableData.scores.team1 : tableData.scores.team2;
-                    if (myTeamScore >= 7) {
-                        updateCoins(150);
-                        updateWins();
-                        showToast('شما برنده بازی شدید! ۱۵۰ سکه جایزه گرفتید.', 'success');
+                if (isOffline) {
+                    // Check if all players have played this trick
+                    const playedCount = Object.keys(updatedTableCards).length;
+                    if (playedCount === 4) {
+                        setGameState(newState);
+                        setTimeout(() => {
+                            resolveTrick(updatedTableCards, nextLeadSuit, newState);
+                        }, 1500);
                     } else {
-                        showToast('متاسفانه تیم حریف برنده شد.', 'error');
+                        setGameState(newState);
+                    }
+                } else {
+                    // Online Mode Update
+                    const { doc, updateDoc } = window.fb;
+                    const db = window.firebaseDb;
+                    const tableRef = doc(db, 'artifacts', appId, 'public', 'data', 'tables', tableId);
+                    
+                    try {
+                         await updateDoc(tableRef, {
+                            [`hands.${playerSlot}`]: updatedHand,
+                            tableCards: updatedTableCards,
+                            leadSuit: nextLeadSuit,
+                            turn: nextTurn
+                        });
+
+                        // If host, check if trick is complete and resolve
+                        if (config.isHost && Object.keys(updatedTableCards).length === 4) {
+                            setTimeout(() => {
+                                resolveTrickOnline(updatedTableCards, nextLeadSuit, newState, tableRef);
+                            }, 2000);
+                        }
+                    } catch (e) {
+                        console.error("Error playing card online", e);
                     }
                 }
-            }, [tableData?.phase]);
-
-            const canHumanPlayCard = (card) => {
-                if (tableData?.turn !== mySlot) return false;
-                if (!tableData.leadSuit) return true;
-                
-                const hasLeadSuit = tableData.hands[mySlot].some(c => c.suit === tableData.leadSuit);
-                if (hasLeadSuit) {
-                    return card.suit === tableData.leadSuit;
-                }
-                return true; 
             };
 
-            const playCard = async (card) => {
-                if (!canHumanPlayCard(card)) {
-                    showToast('شما باید در خال بازی کنید!', 'warning');
-                    return;
+            const getNextTurnSlot = (current) => {
+                const map = { p1: 'p2', p2: 'p3', p3: 'p4', p4: 'p1' };
+                return map[current];
+            };
+
+            const resolveTrick = (tableCards, currentLead, currentState) => {
+                const winner = determineTrickWinner(tableCards, currentState.hokm, currentLead);
+                const isTeam1 = winner === 'p1' || winner === 'p3';
+                
+                const updatedTricks = { ...currentState.tricks };
+                if (isTeam1) {
+                    updatedTricks.team1 += 1;
+                } else {
+                    updatedTricks.team2 += 1;
                 }
 
-                const newHand = tableData.hands[mySlot].filter(c => c.suit !== card.suit || c.value !== card.value);
-                const newTableCards = [...tableData.tableCards, { player: mySlot, card }];
+                playSound(isTeam1 ? 'win' : 'lose');
+
+                let nextState = {
+                    ...currentState,
+                    tableCards: {},
+                    tricks: updatedTricks,
+                    leadSuit: null,
+                    turn: winner
+                };
+
+                // Check if hand/round has finished (First team to reach 7 tricks wins the round)
+                if (updatedTricks.team1 === 7 || updatedTricks.team2 === 7) {
+                    const team1Win = updatedTricks.team1 === 7;
+                    const nextScores = { ...currentState.scores };
+                    
+                    if (team1Win) {
+                        nextScores.team1 += 1;
+                    } else {
+                        nextScores.team2 += 1;
+                    }
+
+                    nextState.scores = nextScores;
+                    nextState.tricks = { team1: 0, team2: 0 };
+                    
+                    if (nextScores.team1 === 7 || nextScores.team2 === 7) {
+                        nextState.phase = 'match_finished';
+                        if (team1Win) {
+                            updateWins();
+                            updateCoins(100);
+                        } else {
+                            updateCoins(-50);
+                        }
+                    } else {
+                        // Change ruler/hakm for next round (standard Hokm rules)
+                        let nextRuler = currentState.ruler;
+                        if (!team1Win && currentState.ruler === 'p1') nextRuler = 'p2';
+                        else if (team1Win && currentState.ruler === 'p2') nextRuler = 'p1';
+
+                        nextState.ruler = nextRuler;
+                        nextState.phase = 'round_finished';
+                    }
+                }
+
+                setGameState(nextState);
+            };
+
+            const resolveTrickOnline = async (tableCards, currentLead, currentState, tableRef) => {
+                const { updateDoc } = window.fb;
                 
-                const nextOrder = ['p1', 'p2', 'p3', 'p4'];
-                let nextTurn = nextOrder[(nextOrder.indexOf(mySlot) + 1) % 4];
-                if (newTableCards.length === 4) nextTurn = null;
+                const winner = determineTrickWinner(tableCards, currentState.hokm, currentLead);
+                const isTeam1 = winner === 'p1' || winner === 'p3';
+                
+                const updatedTricks = { ...currentState.tricks };
+                if (isTeam1) {
+                    updatedTricks.team1 += 1;
+                } else {
+                    updatedTricks.team2 += 1;
+                }
 
-                let updateObj = { [`hands.${mySlot}`]: newHand, tableCards: newTableCards, turn: nextTurn };
-                if (newTableCards.length === 1) updateObj.leadSuit = card.suit;
+                let updatePayload = {
+                    tableCards: {},
+                    tricks: updatedTricks,
+                    leadSuit: null,
+                    turn: winner
+                };
 
+                // Check if hand/round has finished
+                if (updatedTricks.team1 === 7 || updatedTricks.team2 === 7) {
+                    const team1Win = updatedTricks.team1 === 7;
+                    const nextScores = { ...currentState.scores };
+                    
+                    if (team1Win) {
+                        nextScores.team1 += 1;
+                    } else {
+                        nextScores.team2 += 1;
+                    }
+
+                    updatePayload.scores = nextScores;
+                    updatePayload.tricks = { team1: 0, team2: 0 };
+                    
+                    if (nextScores.team1 === 7 || nextScores.team2 === 7) {
+                        updatePayload.phase = 'match_finished';
+                        // Note: Clients handle local coin/win updates when phase changes to match_finished
+                    } else {
+                        // Change ruler/hakm
+                        let nextRuler = currentState.ruler;
+                        if (!team1Win && currentState.ruler === 'p1') nextRuler = 'p2';
+                        else if (team1Win && currentState.ruler === 'p2') nextRuler = 'p1';
+                        // Add more complex logic for p3, p4 if needed
+
+                        updatePayload.ruler = nextRuler;
+                        updatePayload.phase = 'round_finished';
+                    }
+                }
+
+                try {
+                    await updateDoc(tableRef, updatePayload);
+                } catch(e) {
+                    console.error("Error resolving online trick", e);
+                }
+            };
+
+            useEffect(() => {
+                if (!isOffline || gameState.phase !== 'playing') return;
+
+                const botSlot = gameState.turn;
+                if (botSlot === 'p1') return; // User turn
+
+                const aiTimer = setTimeout(() => {
+                    const hand = gameState.hands[botSlot];
+                    if (!hand || hand.length === 0) return;
+
+                    // Choose smart card
+                    let cardToPlay = hand[0];
+                    const leadSuit = gameState.leadSuit;
+
+                    if (leadSuit) {
+                        const matchingCards = hand.filter(c => c.suit === leadSuit);
+                        if (matchingCards.length > 0) {
+                            // High or Low matching card logic
+                            cardToPlay = matchingCards[Math.floor(Math.random() * matchingCards.length)];
+                        } else {
+                            // Cut with Hokm or discard
+                            const hokms = hand.filter(c => c.suit === gameState.hokm);
+                            if (hokms.length > 0) {
+                                cardToPlay = hokms[0];
+                            } else {
+                                cardToPlay = hand[Math.floor(Math.random() * hand.length)];
+                            }
+                        }
+                    } else {
+                        // AI is leading the trick
+                        cardToPlay = hand[Math.floor(Math.random() * hand.length)];
+                    }
+
+                    playCard(botSlot, cardToPlay);
+                }, 1000);
+
+                return () => clearTimeout(aiTimer);
+            }, [gameState.turn, gameState.phase, isOffline]);
+
+            const triggerNextRoundOffline = () => {
+                initOfflineGame();
+            };
+
+            const triggerNextMatchOffline = () => {
+                setGameState(prev => ({ ...prev, scores: { team1: 0, team2: 0 } }));
+                initOfflineGame();
+            };
+
+            const triggerNextRoundOnline = async () => {
+                if(!config.isHost) return;
                 const { doc, updateDoc } = window.fb;
-                await updateDoc(doc(window.firebaseDb, 'artifacts', appId, 'public', 'data', 'tables', tableId), updateObj);
+                const db = window.firebaseDb;
+                const tableRef = doc(db, 'artifacts', appId, 'public', 'data', 'tables', tableId);
+
+                const deck = shuffle(createDeck());
+                const p1Hand = deck.slice(0, 5);
+                const p2Hand = deck.slice(5, 10);
+                const p3Hand = deck.slice(10, 15);
+                const p4Hand = deck.slice(15, 20);
+                const remainingDeck = deck.slice(20);
+
+                await updateDoc(tableRef, {
+                    phase: 'select_hokm',
+                    hands: { p1: p1Hand, p2: p2Hand, p3: p3Hand, p4: p4Hand },
+                    remainingDeck: remainingDeck,
+                    turn: gameState.ruler,
+                    hokm: null,
+                    tableCards: {},
+                    leadSuit: null
+                });
             };
 
-            const leaveGame = async () => {
-                if (tableData?.phase === 'playing' && window.confirm('آیا مطمئن هستید؟ خروج از بازی باعث کسر ۵۰ سکه می‌شود.')) {
-                    updateCoins(-50);
+            // Handle online win/loss side effects
+            useEffect(() => {
+                if(!isOffline && gameState.phase === 'match_finished') {
+                    // Avoid multiple calls by checking if it was already updated
+                    const team1Win = gameState.scores.team1 === 7;
+                    const isTeam1 = mySlot === 'p1' || mySlot === 'p3';
+                    
+                    // Simple local notification for the player
+                    if((team1Win && isTeam1) || (!team1Win && !isTeam1)) {
+                         // We don't call updateWins here directly because it might run multiple times 
+                         // during re-renders. A better approach is handling this state via a modal button.
+                    }
                 }
-                if (tableData?.id) {
-                    try {
-                        const { doc, updateDoc } = window.fb;
-                        await updateDoc(doc(window.firebaseDb, 'artifacts', appId, 'public', 'data', 'tables', tableId), {
-                            [`players.${mySlot}`]: null
-                        });
-                    } catch(e){}
-                }
-                setView('lobby');
-            };
-
-            if (!tableData) return <div className="w-full h-full flex items-center justify-center text-white"><i className="fas fa-spinner fa-spin text-4xl text-amber-500"></i></div>;
-
-            // View Helpers for Relative Positions
-            const getPos = (targetPos) => {
-                const order = ['p1', 'p2', 'p3', 'p4'];
-                const myIdx = order.indexOf(mySlot);
-                if (targetPos === 'bottom') return order[myIdx];
-                if (targetPos === 'right') return order[(myIdx + 1) % 4];
-                if (targetPos === 'top') return order[(myIdx + 2) % 4];
-                if (targetPos === 'left') return order[(myIdx + 3) % 4];
-            };
-            
-            const rightSlot = getPos('right');
-            const topSlot = getPos('top');
-            const leftSlot = getPos('left');
-
-            const isMyTeamTeam1 = mySlot === 'p1' || mySlot === 'p3';
-            const myTeamScore = isMyTeamTeam1 ? tableData.scores.team1 : tableData.scores.team2;
-            const enemyScore = isMyTeamTeam1 ? tableData.scores.team2 : tableData.scores.team1;
+            }, [gameState.phase, isOffline]);
 
             return (
-                <div className="w-full h-full flex flex-col bg-slate-900 overflow-hidden relative font-sans">
-                    {/* Top Bar */}
-                    <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-20 pointer-events-none">
-                        <button onClick={leaveGame} className="w-10 h-10 bg-red-500/80 rounded-full flex items-center justify-center text-white hover:bg-red-500 shadow pointer-events-auto backdrop-blur">
-                            <i className="fas fa-sign-out-alt"></i>
-                        </button>
-                        <div className="bg-slate-800/80 backdrop-blur px-4 py-2 rounded-full border border-slate-600 flex gap-4 text-white text-sm font-bold pointer-events-auto">
-                            <div className="text-emerald-400">تیم ما: {myTeamScore}</div>
-                            <div className="text-red-400">حریف: {enemyScore}</div>
+                <div className="w-full h-full flex flex-col justify-between p-4 overflow-hidden relative">
+                    {/* Header Score Info */}
+                    <div className="flex justify-between items-center bg-slate-800/80 backdrop-blur-md p-3 rounded-2xl border border-slate-700/80 shadow-lg">
+                        <div className="flex gap-4">
+                            <button onClick={() => setView('lobby')} className="text-slate-400 hover:text-white px-2">
+                                <i className="fas fa-arrow-right"></i> خروج
+                            </button>
+                            <span className="text-sm font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1 rounded-full">
+                                {isOffline ? "🤖 حالت تک نفره با ربات" : `🌐 میز آنلاین #${tableId}`}
+                            </span>
                         </div>
-                        <div className="w-10 h-10 bg-slate-800/80 rounded-full flex items-center justify-center text-white border border-slate-600 pointer-events-auto shadow">
-                            {tableData.hokm ? <span className={SUITS[tableData.hokm].color === 'red' ? 'text-red-500 text-xl' : 'text-slate-200 text-xl'}>{SUITS[tableData.hokm].icon}</span> : '?'}
+
+                        {/* Tricks & Scores Grid */}
+                        <div className="flex items-center gap-6">
+                            <div className="text-center">
+                                <p className="text-[10px] text-slate-400">تیم شما (ما)</p>
+                                <div className="flex items-center gap-1.5 justify-center">
+                                    <span className="text-amber-400 font-black text-lg">{gameState.scores.team1}</span>
+                                    <span className="text-xs text-slate-500">راند</span>
+                                    <span className="text-emerald-400 font-bold ml-2">({gameState.tricks.team1})</span>
+                                </div>
+                            </div>
+                            <div className="h-6 w-px bg-slate-700"></div>
+                            <div className="text-center">
+                                <p className="text-[10px] text-slate-400">تیم حریف (آنها)</p>
+                                <div className="flex items-center gap-1.5 justify-center">
+                                    <span className="text-rose-400 font-black text-lg">{gameState.scores.team2}</span>
+                                    <span className="text-xs text-slate-500">راند</span>
+                                    <span className="text-rose-500 font-bold ml-2">({gameState.tricks.team2})</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Hokm Badge */}
+                        <div className="flex items-center gap-2">
+                            {gameState.hokm ? (
+                                <div className="flex items-center gap-1.5 bg-slate-900 border border-amber-500/40 px-3.5 py-1.5 rounded-xl font-bold">
+                                    <span className="text-xs text-slate-400">حکم:</span>
+                                    <span className={`${SUITS[gameState.hokm].class} text-lg`}>{gameState.hokm} {SUITS[gameState.hokm].name}</span>
+                                </div>
+                            ) : (
+                                <span className="text-xs text-slate-500 animate-pulse">در انتظار حکم...</span>
+                            )}
                         </div>
                     </div>
 
-                    {tableData.phase === 'waiting' ? (
-                        <div className="flex-1 flex flex-col items-center justify-center z-10 text-white p-6 text-center">
-                            <i className="fas fa-users text-6xl text-amber-500 mb-6 drop-shadow-lg animate-pulse"></i>
-                            <h2 className="text-3xl font-black mb-4">میز انتظار</h2>
-                            <p className="text-slate-300 mb-6">شناسه میز برای دعوت دوستان: <span className="font-bold text-amber-400 bg-slate-800 px-3 py-1 rounded tracking-widest">{tableData.id}</span></p>
+                    {/* Central Felt-Covered Game Board */}
+                    <div className="flex-grow my-4 flex items-center justify-center relative overflow-hidden">
+                        <div className="w-full max-w-[620px] aspect-[4/3] game-table-bg relative p-4 flex flex-col justify-between items-center">
                             
-                            <div className="grid grid-cols-2 gap-4 w-full max-w-md mb-8">
-                                {['p1', 'p2', 'p3', 'p4'].map(slot => (
-                                    <div key={slot} className={`p-3 rounded-xl border-2 flex items-center gap-3 ${tableData.players[slot] ? 'border-emerald-500 bg-emerald-500/20' : 'border-slate-600 bg-slate-800/50'}`}>
-                                        <div className="w-10 h-10 bg-slate-900 rounded-full flex items-center justify-center">
-                                            <i className={`fas ${tableData.players[slot] ? 'fa-user text-emerald-400' : 'fa-robot text-slate-500'}`}></i>
-                                        </div>
-                                        <span className="font-bold text-sm">{tableData.players[slot] ? tableData.players[slot].username : 'ربات هوشمند'}</span>
+                            {/* Opponent Top (Partner P3) */}
+                            <div className="absolute top-2 flex flex-col items-center">
+                                <div className="bg-slate-900/95 border border-slate-700 rounded-full px-3 py-1.5 flex items-center gap-2 shadow-md">
+                                    <i className="fas fa-user-circle text-indigo-400 text-sm"></i>
+                                    <span className="text-xs font-bold text-slate-200">{gameState.players.p3?.username || "یار شما"}</span>
+                                    <span className="text-[10px] bg-slate-800 px-1.5 rounded text-amber-400">{gameState.hands.p3?.length || 0} ک</span>
+                                </div>
+                                {gameState.ruler === 'p3' && <span className="text-[9px] bg-yellow-500 text-slate-900 font-bold px-1 rounded-full mt-1"><i className="fas fa-crown"></i> حاکم</span>}
+                            </div>
+
+                            {/* Opponent Left (P2) */}
+                            <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center">
+                                <div className="bg-slate-900/95 border border-slate-700 rounded-full px-3 py-1.5 flex items-center gap-2 shadow-md origin-center -rotate-90 md:rotate-0">
+                                    <i className="fas fa-user-circle text-slate-400 text-sm"></i>
+                                    <span className="text-xs font-bold text-slate-200">{gameState.players.p2?.username || "رقیب چپ"}</span>
+                                    <span className="text-[10px] bg-slate-800 px-1.5 rounded text-amber-400">{gameState.hands.p2?.length || 0} ک</span>
+                                </div>
+                                {gameState.ruler === 'p2' && <span className="text-[9px] bg-yellow-500 text-slate-900 font-bold px-1 rounded-full mt-1"><i className="fas fa-crown"></i> حاکم</span>}
+                            </div>
+
+                            {/* Opponent Right (P4) */}
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center">
+                                <div className="bg-slate-900/95 border border-slate-700 rounded-full px-3 py-1.5 flex items-center gap-2 shadow-md origin-center rotate-90 md:rotate-0">
+                                    <i className="fas fa-user-circle text-slate-400 text-sm"></i>
+                                    <span className="text-xs font-bold text-slate-200">{gameState.players.p4?.username || "رقیب راست"}</span>
+                                    <span className="text-[10px] bg-slate-800 px-1.5 rounded text-amber-400">{gameState.hands.p4?.length || 0} ک</span>
+                                </div>
+                                {gameState.ruler === 'p4' && <span className="text-[9px] bg-yellow-500 text-slate-900 font-bold px-1 rounded-full mt-1"><i className="fas fa-crown"></i> حاکم</span>}
+                            </div>
+
+                            {/* Center Played Cards Slot (Trick Layout) */}
+                            <div className="w-44 h-44 rounded-full border border-emerald-500/25 relative flex items-center justify-center bg-emerald-950/20 shadow-inner mt-12">
+                                {/* Lead Suit Guide Marker */}
+                                {gameState.leadSuit && (
+                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-emerald-500/10 text-6xl select-none font-bold">
+                                        {gameState.leadSuit}
                                     </div>
+                                )}
+
+                                {/* P3 Card played */}
+                                <div className="absolute top-1">
+                                    {gameState.tableCards.p3 && <PlayingCard card={gameState.tableCards.p3} disabled className="scale-75 shadow-lg" />}
+                                </div>
+
+                                {/* P2 Card played */}
+                                <div className="absolute left-1">
+                                    {gameState.tableCards.p2 && <PlayingCard card={gameState.tableCards.p2} disabled className="scale-75 shadow-lg" />}
+                                </div>
+
+                                {/* P4 Card played */}
+                                <div className="absolute right-1">
+                                    {gameState.tableCards.p4 && <PlayingCard card={gameState.tableCards.p4} disabled className="scale-75 shadow-lg" />}
+                                </div>
+
+                                {/* P1 Card played */}
+                                <div className="absolute bottom-1">
+                                    {gameState.tableCards.p1 && <PlayingCard card={gameState.tableCards.p1} disabled className="scale-75 shadow-lg" />}
+                                </div>
+                            </div>
+
+                            {/* P1 Bottom Label (My Identity) */}
+                            <div className="absolute bottom-2 flex flex-col items-center">
+                                {gameState.ruler === 'p1' && <span className="text-[9px] bg-yellow-500 text-slate-900 font-bold px-1.5 py-0.5 rounded-full mb-1"><i className="fas fa-crown"></i> شما حاکم هستید</span>}
+                                <div className="bg-slate-900 border border-slate-600 rounded-full px-4 py-1.5 flex items-center gap-2 shadow-lg">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                                    <span className="text-xs font-black text-amber-400">نوبت شما: {gameState.players[mySlot]?.username}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Suit Selector Modal for Rule-maker (Hاکم) */}
+                    {gameState.phase === 'select_hokm' && gameState.ruler === mySlot && (
+                        <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-30 flex flex-col items-center justify-center p-6 text-center">
+                            <i className="fas fa-crown text-6xl text-amber-400 mb-4 animate-bounce"></i>
+                            <h3 className="text-3xl font-black text-white mb-2">تعیین خال حکم</h3>
+                            <p className="text-slate-400 text-sm max-w-sm mb-8">شما حاکم این دست هستید. ۵ کارت شما برای انتخاب بهترین استراتژی بالا آمده است.</p>
+                            
+                            <div className="flex gap-4 mb-8 overflow-x-auto p-4 bg-slate-900/60 rounded-2xl border border-slate-800">
+                                {gameState.hands[mySlot]?.map((c, i) => (
+                                    <PlayingCard key={i} card={c} disabled />
                                 ))}
                             </div>
-                            
-                            {isHost && (
-                                <button onClick={startGame} className="bg-amber-500 hover:bg-amber-400 text-slate-900 font-black px-8 py-3 rounded-xl shadow-lg transition text-lg">
-                                    شروع بازی (با ربات‌ها یا دوستان)
-                                </button>
-                            )}
-                            {!isHost && <p className="text-amber-400">منتظر شروع بازی توسط سازنده میز...</p>}
-                        </div>
-                    ) : (
-                        <div className="flex-1 p-2 md:p-6 pb-32 relative flex items-center justify-center">
-                            <div className="game-table-bg w-full h-full max-w-4xl max-h-[800px] relative flex items-center justify-center">
-                                
-                                {/* Top - Partner */}
-                                <div className="absolute top-2 md:top-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center">
-                                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-white mb-1 md:mb-2 shadow border-2 ${tableData.turn === topSlot ? 'border-amber-400 shadow-[0_0_15px_#fbbf24]' : 'border-slate-500 bg-slate-700'}`}>
-                                        <i className={`fas ${tableData.players[topSlot] ? 'fa-user' : 'fa-robot'} text-lg md:text-xl`}></i>
-                                    </div>
-                                    <div className="flex -space-x-5 md:-space-x-4 rtl:space-x-reverse">
-                                        {Array.from({length: tableData.hands[topSlot].length}).map((_, i) => (
-                                            <div key={i} className="playing-card bg-blue-900 border-white/50 w-6 h-10 md:w-8 md:h-12 shadow" style={{transform: `rotate(${(i - tableData.hands[topSlot].length/2) * 2}deg)`}}></div>
-                                        ))}
-                                    </div>
-                                    <div className="text-xs text-white/50 mt-1 font-bold">{tableData.players[topSlot]?.username || 'ربات'}</div>
-                                </div>
 
-                                {/* Right - Next Opponent (Counter-Clockwise View) */}
-                                <div className="absolute right-2 md:right-4 top-1/2 transform -translate-y-1/2 flex flex-col items-center">
-                                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-white mb-1 md:mb-2 shadow border-2 ${tableData.turn === rightSlot ? 'border-amber-400 shadow-[0_0_15px_#fbbf24]' : 'border-slate-500 bg-slate-700'}`}>
-                                        <i className={`fas ${tableData.players[rightSlot] ? 'fa-user' : 'fa-robot'} text-lg md:text-xl`}></i>
-                                    </div>
-                                    <div className="flex flex-col -space-y-6 md:-space-y-4">
-                                        {Array.from({length: tableData.hands[rightSlot].length}).map((_, i) => (
-                                            <div key={i} className="playing-card bg-red-900 border-white/50 w-10 h-6 md:w-12 md:h-8 shadow -rotate-90" style={{marginRight: `${(i - tableData.hands[rightSlot].length/2) * 2}px`}}></div>
-                                        ))}
-                                    </div>
-                                    <div className="text-xs text-white/50 mt-1 font-bold rotate-90 absolute -left-10 top-1/2 whitespace-nowrap">{tableData.players[rightSlot]?.username || 'ربات'}</div>
-                                </div>
-
-                                {/* Left - Prev Opponent */}
-                                <div className="absolute left-2 md:left-4 top-1/2 transform -translate-y-1/2 flex flex-col items-center">
-                                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-white mb-1 md:mb-2 shadow border-2 ${tableData.turn === leftSlot ? 'border-amber-400 shadow-[0_0_15px_#fbbf24]' : 'border-slate-500 bg-slate-700'}`}>
-                                        <i className={`fas ${tableData.players[leftSlot] ? 'fa-user' : 'fa-robot'} text-lg md:text-xl`}></i>
-                                    </div>
-                                    <div className="flex flex-col -space-y-6 md:-space-y-4">
-                                        {Array.from({length: tableData.hands[leftSlot].length}).map((_, i) => (
-                                            <div key={i} className="playing-card bg-red-900 border-white/50 w-10 h-6 md:w-12 md:h-8 shadow rotate-90" style={{marginLeft: `${(i - tableData.hands[leftSlot].length/2) * 2}px`}}></div>
-                                        ))}
-                                    </div>
-                                    <div className="text-xs text-white/50 mt-1 font-bold -rotate-90 absolute -right-10 top-1/2 whitespace-nowrap">{tableData.players[leftSlot]?.username || 'ربات'}</div>
-                                </div>
-
-                                {/* Center Played Cards Area */}
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                    <div className="w-full h-full max-w-[200px] max-h-[200px] md:max-w-[250px] md:max-h-[250px] relative">
-                                        {tableData.tableCards.map((play, idx) => {
-                                            let positionClass = '';
-                                            if (play.player === mySlot) positionClass = 'bottom-0 left-1/2 -translate-x-1/2';
-                                            if (play.player === topSlot) positionClass = 'top-0 left-1/2 -translate-x-1/2';
-                                            if (play.player === leftSlot) positionClass = 'left-0 top-1/2 -translate-y-1/2 rotate-90';
-                                            if (play.player === rightSlot) positionClass = 'right-0 top-1/2 -translate-y-1/2 -rotate-90';
-                                            
-                                            return (
-                                                <div key={idx} className={`absolute transition-all duration-300 z-10 slide-up ${positionClass}`}>
-                                                    <PlayingCard card={play.card} className="w-[15vw] max-w-[60px] md:max-w-[75px]" />
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                {/* Center Logo Background */}
-                                {tableData.tableCards.length === 0 && tableData.phase === 'playing' && (
-                                    <i className="fas fa-spade text-white/10 text-8xl absolute pointer-events-none"></i>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Bottom - Player Hand */}
-                    {tableData.phase !== 'waiting' && (
-                        <div className="absolute bottom-0 left-0 w-full p-4 flex flex-col items-center bg-gradient-to-t from-slate-900 to-transparent">
-                            {/* Turn Indicator */}
-                            {tableData.phase === 'playing' && tableData.turn === mySlot && (
-                                <div className="mb-2 md:mb-4 bg-amber-500 text-slate-900 px-4 py-1 rounded-full font-bold text-sm shadow animate-pulse">
-                                    نوبت شماست
-                                </div>
-                            )}
-
-                            {/* Hand Cards */}
-                            <div className="flex -space-x-5 md:-space-x-4 rtl:space-x-reverse items-end justify-center w-full px-2 overflow-visible h-24 md:h-32 relative">
-                                {tableData.hands[mySlot].map((card, idx) => {
-                                    const disabled = tableData.phase !== 'playing' || tableData.turn !== mySlot || !canHumanPlayCard(card);
+                            <div className="grid grid-cols-4 gap-4 w-full max-w-md">
+                                {SUIT_LIST.map((suit) => {
+                                    const suitData = SUITS[suit];
                                     return (
-                                        <div 
-                                            key={`${card.suit}-${card.value}`} 
-                                            style={{ zIndex: idx }}
-                                            className="relative transition-transform duration-300 hover:z-50"
+                                        <button 
+                                            key={suit}
+                                            onClick={() => {
+                                                if (isOffline) distributeRemainingCards(suit, gameState.remainingDeck);
+                                                else selectHokmOnline(suit);
+                                            }}
+                                            className="bg-slate-800 hover:bg-slate-700 p-4 rounded-2xl border border-slate-600 transition flex flex-col items-center justify-center gap-2 group hover:border-amber-400"
                                         >
-                                            <PlayingCard 
-                                                card={card} 
-                                                disabled={disabled}
-                                                onClick={() => playCard(card)}
-                                                className={`transform ${!disabled && tableData.turn === mySlot ? '-translate-y-2' : ''}`}
-                                            />
-                                        </div>
+                                            <span className={`${suitData.class} text-4xl group-hover:scale-125 transition`}>{suit}</span>
+                                            <span className="text-xs font-bold text-slate-300">{suitData.name}</span>
+                                        </button>
                                     );
                                 })}
                             </div>
                         </div>
                     )}
 
-                    {/* Hokm Selection Modal */}
-                    <Modal isOpen={tableData.phase === 'setting_hokm' && isHost} title="تعیین حکم">
-                        <div className="text-center">
-                            <p className="mb-6">شما حاکم هستید. با توجه به ۵ کارت اول خود، حکم را انتخاب کنید:</p>
-                            <div className="grid grid-cols-2 gap-4">
-                                {Object.keys(SUITS).map(suitKey => (
-                                    <button 
-                                        key={suitKey}
-                                        onClick={() => handleSetHokm(suitKey)}
-                                        className="bg-slate-800 hover:bg-slate-700 border border-slate-600 p-4 rounded-xl flex flex-col items-center justify-center transition"
-                                    >
-                                        <span className={`text-4xl mb-2 ${SUITS[suitKey].color === 'red' ? 'text-red-500' : 'text-slate-200'}`}>
-                                            {SUITS[suitKey].icon}
+                    {/* Waiting area for Ruler decision (If others are waiting for host/ruler) */}
+                    {gameState.phase === 'select_hokm' && gameState.ruler !== mySlot && (
+                        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center text-center p-6">
+                            <i className="fas fa-hourglass-half text-5xl text-amber-400 animate-spin mb-4"></i>
+                            <h3 className="text-2xl font-black text-white mb-2">در انتظار انتخاب حکم...</h3>
+                            <p className="text-slate-400 text-sm max-w-sm">حاکم ({gameState.players[gameState.ruler]?.username || 'نامشخص'}) در حال انتخاب بهترین خال برای حکم این دور است.</p>
+                        </div>
+                    )}
+
+                    {/* Waiting for online players */}
+                    {!isOffline && gameState.phase === 'waiting' && (
+                        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center text-center p-6">
+                            <i className="fas fa-users text-5xl text-blue-400 animate-pulse mb-4"></i>
+                            <h3 className="text-2xl font-black text-white mb-2">منتظر سایر بازیکنان...</h3>
+                            <p className="text-slate-400 text-sm max-w-sm mb-4">لطفاً کد میز <span className="font-bold text-amber-400">{tableId}</span> را با دوستان خود به اشتراک بگذارید تا به شما ملحق شوند.</p>
+                            
+                            <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl w-full max-w-xs space-y-2">
+                                {['p1', 'p2', 'p3', 'p4'].map(slot => (
+                                    <div key={slot} className="flex justify-between text-sm">
+                                        <span className="text-slate-400">صندلی {slot}:</span>
+                                        <span className={gameState.players[slot] ? "text-emerald-400" : "text-slate-600"}>
+                                            {gameState.players[slot] ? gameState.players[slot].username : "خالی..."}
                                         </span>
-                                        <span className="font-bold">{SUITS[suitKey].name}</span>
-                                    </button>
+                                    </div>
                                 ))}
                             </div>
                         </div>
-                    </Modal>
+                    )}
 
-                    {/* Game Over Modal */}
-                    <Modal isOpen={tableData.phase === 'game_over'} title="پایان بازی">
-                        <div className="text-center py-6">
-                            {myTeamScore >= 7 ? (
-                                <div>
-                                    <i className="fas fa-trophy text-6xl text-amber-400 mb-4 drop-shadow-lg"></i>
-                                    <h3 className="text-2xl font-black text-white mb-2">تبریک! برنده شدید!</h3>
-                                    <p className="text-emerald-400 font-bold mb-6">+۱۵۰ سکه جایزه</p>
-                                </div>
+                    {/* Round Resolution Modal */}
+                    {gameState.phase === 'round_finished' && (
+                        <div className="absolute inset-0 bg-black/95 backdrop-blur-md z-30 flex flex-col items-center justify-center text-center p-6">
+                            <i className="fas fa-flag text-5xl text-amber-400 mb-4 animate-bounce"></i>
+                            <h3 className="text-3xl font-black text-white mb-2">راند به پایان رسید!</h3>
+                            <p className="text-slate-300 text-lg mb-6 leading-relaxed">
+                                برنده این راند تیمی است که زودتر به ۷ امتیاز ترفند رسید. <br/>
+                                <span className="text-amber-400 font-bold">حاکم دور بعدی: {gameState.players[gameState.ruler]?.username}</span>
+                            </p>
+                            {isOffline ? (
+                                <button 
+                                    onClick={triggerNextRoundOffline}
+                                    className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold px-8 py-3 rounded-xl shadow-lg transform transition hover:scale-105"
+                                >
+                                    شروع راند بعدی
+                                </button>
+                            ) : config.isHost ? (
+                                <button 
+                                    onClick={triggerNextRoundOnline}
+                                    className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold px-8 py-3 rounded-xl shadow-lg transform transition hover:scale-105"
+                                >
+                                    شروع راند بعدی میز آنلاین
+                                </button>
                             ) : (
-                                <div>
-                                    <i className="fas fa-sad-tear text-6xl text-red-500 mb-4 drop-shadow-lg"></i>
-                                    <h3 className="text-2xl font-black text-white mb-6">متاسفانه باختید!</h3>
-                                </div>
+                                <p className="text-amber-400 animate-pulse mt-4">منتظر شروع راند جدید توسط میزبان...</p>
                             )}
-                            <button 
-                                onClick={leaveGame}
-                                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition shadow"
-                            >
-                                بازگشت به لابی
-                            </button>
                         </div>
-                    </Modal>
+                    )}
 
+                    {/* Match Resolution Modal */}
+                    {gameState.phase === 'match_finished' && (
+                        <div className="absolute inset-0 bg-black/95 backdrop-blur-md z-30 flex flex-col items-center justify-center text-center p-6">
+                            <i className="fas fa-trophy text-7xl text-amber-400 mb-4 animate-pulse"></i>
+                            <h3 className="text-4xl font-black text-white mb-2">بازی به پایان رسید!</h3>
+                            <p className="text-slate-300 text-xl mb-8 leading-relaxed">
+                                تیمی که به امتیاز راند ۷ رسید پیروز مسابقه شد. <br/>
+                                <span className="text-emerald-400 font-extrabold text-2xl">تبریک به تیم برنده!</span>
+                            </p>
+                            <div className="flex gap-4">
+                                <button 
+                                    onClick={() => setView('lobby')}
+                                    className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-6 py-3 rounded-xl border border-slate-600 transition"
+                                >
+                                    بازگشت به لابی
+                                </button>
+                                {isOffline && (
+                                    <button 
+                                        onClick={triggerNextMatchOffline}
+                                        className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold px-8 py-3 rounded-xl shadow-lg transform transition hover:scale-105"
+                                    >
+                                        شروع بازی جدید
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Playing Cards Hand Area for Active Player */}
+                    <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-4 flex flex-col items-center relative gap-3">
+                        <div className="text-slate-400 text-xs font-bold absolute -top-3.5 right-6 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
+                            دست شما ({gameState.hands[mySlot]?.length || 0} کارت)
+                        </div>
+
+                        {/* Interactive Hand Layout */}
+                        <div className="flex justify-center overflow-x-auto w-full gap-2 p-2 max-h-[160px]">
+                            {gameState.hands[mySlot]?.length > 0 ? (
+                                gameState.hands[mySlot]?.map((card, i) => (
+                                    <PlayingCard 
+                                        key={i} 
+                                        card={card} 
+                                        onClick={(c) => playCard(mySlot, c)}
+                                        disabled={gameState.turn !== mySlot || gameState.phase !== 'playing'}
+                                    />
+                                ))
+                            ) : (
+                                <div className="text-slate-500 text-sm py-4 animate-pulse">کارت‌ها پخش نشده یا منتظر حکم است.</div>
+                            )}
+                        </div>
+                    </div>
                 </div>
             );
         };
@@ -1142,88 +1521,71 @@
             const [adText, setAdText] = useState(globalAd.text);
             const [adLink, setAdLink] = useState(globalAd.link);
 
-            if (!user || !user.isAdmin) return null;
-
-            const handleSaveAd = () => {
-                if (!adText || !adLink) {
-                    showToast('تمامی فیلدها باید پر شوند.', 'warning');
-                    return;
-                }
+            const handleSave = () => {
                 setGlobalAd({ text: adText, link: adLink });
-                showToast('تبلیغات با موفقیت به‌روزرسانی شد.', 'success');
+                showToast('تغییرات سیستم تبلیغات و لابی ذخیره شد.', 'success');
+                setView('lobby');
             };
 
             return (
-                <div className="w-full h-full bg-slate-900 flex justify-center items-start p-6 overflow-y-auto">
-                    <div className="w-full max-w-lg glass-panel rounded-3xl p-6 mt-10 relative">
-                        <button onClick={() => setView('lobby')} className="absolute top-6 right-6 text-slate-400 hover:text-white transition">
-                            <i className="fas fa-arrow-right text-xl"></i>
+                <div className="w-full h-full max-w-2xl p-6 bg-slate-900 overflow-y-auto">
+                    <div className="glass-panel p-6 rounded-3xl border border-slate-700 space-y-6">
+                        <div className="flex justify-between items-center border-b border-slate-700 pb-4">
+                            <button onClick={() => setView('lobby')} className="text-slate-400 hover:text-white">
+                                <i className="fas fa-arrow-right text-xl"></i>
+                            </button>
+                            <h2 className="text-2xl font-black text-amber-400">پنل مدیریت بی‌نیاز حکم</h2>
+                            <i className="fas fa-sliders-h text-xl text-slate-400"></i>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-slate-300 text-sm font-bold mb-2">متن بنر لابی</label>
+                                <textarea 
+                                    value={adText}
+                                    onChange={(e) => setAdText(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-amber-400"
+                                    rows="3"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-slate-300 text-sm font-bold mb-2">لینک دکمه بنر لابی</label>
+                                <input 
+                                    type="text" 
+                                    value={adLink}
+                                    onChange={(e) => setAdLink(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-amber-400"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+                            <h4 className="font-bold text-slate-300 text-sm">وضعیت آماری کوتاه</h4>
+                            <div className="grid grid-cols-2 gap-4 text-center">
+                                <div className="bg-slate-900/60 p-3 rounded-xl">
+                                    <div className="text-amber-400 font-bold text-lg">999,999</div>
+                                    <div className="text-xs text-slate-500">مجموع سکه ادمین</div>
+                                </div>
+                                <div className="bg-slate-900/60 p-3 rounded-xl">
+                                    <div className="text-emerald-400 font-bold text-lg">۱,۲۰۰+</div>
+                                    <div className="text-xs text-slate-500">کاربران ثبت‌نامی فرضی</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={handleSave}
+                            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold py-3.5 rounded-xl shadow-lg"
+                        >
+                            بروزرسانی تغییرات کلان سیستم
                         </button>
-                        
-                        <div className="text-center mb-8 border-b border-slate-700 pb-6">
-                            <i className="fas fa-user-shield text-5xl text-amber-500 mb-4"></i>
-                            <h2 className="text-2xl font-black text-white">پنل مدیریت سیستم</h2>
-                            <p className="text-slate-400 text-sm mt-2">مدیریت محتوای بی‌نیاز حکم</p>
-                        </div>
-
-                        <div className="space-y-6">
-                            <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                                <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-amber-400">
-                                    <i className="fas fa-bullhorn"></i> تنظیمات تبلیغ سراسری
-                                </h3>
-                                
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-slate-300 text-sm font-bold mb-2">متن تبلیغ</label>
-                                        <input 
-                                            type="text" 
-                                            value={adText} 
-                                            onChange={e => setAdText(e.target.value)} 
-                                            className="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-amber-400 focus:outline-none" 
-                                            placeholder="مثال: تخفیف ویژه..."
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-slate-300 text-sm font-bold mb-2">لینک تبلیغ (URL)</label>
-                                        <input 
-                                            type="url" 
-                                            value={adLink} 
-                                            onChange={e => setAdLink(e.target.value)} 
-                                            className="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-amber-400 focus:outline-none text-left" 
-                                            dir="ltr"
-                                            placeholder="https://..."
-                                        />
-                                    </div>
-                                    <button 
-                                        onClick={handleSaveAd} 
-                                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg mt-2 transition shadow-lg flex items-center justify-center gap-2"
-                                    >
-                                        <i className="fas fa-save"></i> ثبت تغییرات تبلیغ
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 text-center">
-                                <h3 className="font-bold text-lg mb-2 text-slate-200">آمار سیستم (تستی)</h3>
-                                <div className="grid grid-cols-2 gap-4 mt-4">
-                                    <div className="bg-slate-900 p-3 rounded-lg">
-                                        <div className="text-slate-400 text-xs">کل کاربران</div>
-                                        <div className="text-xl font-bold text-white">۱,۲۸۴</div>
-                                    </div>
-                                    <div className="bg-slate-900 p-3 rounded-lg">
-                                        <div className="text-slate-400 text-xs">بازی‌های امروز</div>
-                                        <div className="text-xl font-bold text-white">۵,۰۳۲</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
                     </div>
                 </div>
             );
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
         root.render(<App />);
     </script>
 </body>
