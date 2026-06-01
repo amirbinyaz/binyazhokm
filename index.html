@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Binyaz Hokm | بازی حکم بی‌نیاز</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Custom Styles -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Vazirmatn', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #f8fafc;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .gold-text {
+            background: linear-gradient(to right, #ffd700, #ffaa00);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Intro Animation Keyframes */
+        @keyframes logoScale {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes shine {
+            to { background-position: 200% center; }
+        }
+        .intro-logo {
+            animation: logoScale 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+        
+        /* Playing Card Styles */
+        .playing-card {
+            width: 14vw;
+            max-width: 80px;
+            aspect-ratio: 2.5/3.5;
+            background: white;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 4px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            border: 1px solid #ccc;
+            cursor: pointer;
+            transition: transform 0.2s, top 0.2s;
+            position: relative;
+        }
+        .playing-card:hover:not(.disabled) {
+            transform: translateY(-10px);
+        }
+        .playing-card.red { color: #ef4444; }
+        .playing-card.black { color: #1e293b; }
+        
+        .card-top { font-size: 1rem; font-weight: bold; line-height: 1; }
+        .card-center { font-size: 2rem; align-self: center; }
+        .card-bottom { font-size: 1rem; font-weight: bold; line-height: 1; transform: rotate(180deg); }
+        
+        /* Game Table Area */
+        .game-table-bg {
+            background: radial-gradient(circle at center, #065f46, #022c22);
+            border: 8px solid #78350f;
+            border-radius: 40px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5), 0 10px 30px rgba(0,0,0,0.8);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+
+        .slide-up { animation: slideUp 0.3s ease-out forwards; }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root" class="h-screen w-screen relative"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // --- CONSTANTS & MOCK DATA ---
+        const ADMIN_USER = "amirbinyaz";
+        const ADMIN_PASS = "09178458526amirpc";
+        
+        const SUITS = {
+            '♠': { color: 'black', icon: '♠', name: 'پیک' },
+            '♥': { color: 'red', icon: '♥', name: 'دل' },
+            '♣': { color: 'black', icon: '♣', name: 'خاج' },
+            '♦': { color: 'red', icon: '♦', name: 'خشت' }
+        };
+        const VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        
+        const FAKE_PLAYERS = [
+            { name: "Ali_Pro", wins: 145 }, { name: "Sara_88", wins: 120 },
+            { name: "Hokm_King", wins: 98 }, { name: "Reza_Teh", wins: 85 },
+            { name: "PersianCat", wins: 72 }, { name: "Mhmd_Gamer", wins: 60 }
+        ];
+
+        // --- HELPER COMPONENTS ---
+
+        const Toast = ({ message, type, onClose }) => {
+            useEffect(() => {
+                const timer = setTimeout(onClose, 3000);
+                return () => clearTimeout(timer);
+            }, [onClose]);
+
+            const bgColors = {
+                success: 'bg-green-600',
+                error: 'bg-red-600',
+                info: 'bg-blue-600',
+                warning: 'bg-yellow-600'
+            };
+
+            return (
+                <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 ${bgColors[type] || 'bg-gray-800'} text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3 slide-up`}>
+                    <i className={`fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'times-circle' : 'info-circle'}`}></i>
+                    <span className="font-bold">{message}</span>
+                </div>
+            );
+        };
+
+        const Modal = ({ isOpen, title, children, onClose }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="glass-panel border border-slate-700 w-full max-w-md rounded-2xl overflow-hidden slide-up">
+                        <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700">
+                            <h3 className="font-bold text-xl text-white">{title}</h3>
+                            {onClose && (
+                                <button onClick={onClose} className="text-slate-400 hover:text-white transition">
+                                    <i className="fas fa-times text-xl"></i>
+                                </button>
+                            )}
+                        </div>
+                        <div className="p-6 bg-slate-900/90 text-slate-200">
+                            {children}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const PlayingCard = ({ card, onClick, disabled, className = "" }) => {
+            if (!card) return <div className={`playing-card bg-slate-800 border-slate-700 ${className}`}></div>; // Back of card
+            if (card === 'hidden') return (
+                <div className={`playing-card bg-gradient-to-br from-blue-800 to-blue-900 border-2 border-white flex items-center justify-center ${className}`}>
+                    <i className="fas fa-crown text-white/30 text-2xl"></i>
+                </div>
+            );
+
+            const suitData = SUITS[card.suit];
+            const isRed = suitData.color === 'red';
+            
+            return (
+                <div 
+                    onClick={() => !disabled && onClick && onClick(card)}
+                    className={`playing-card ${isRed ? 'red' : 'black'} ${disabled ? 'opacity-75 cursor-not-allowed disabled' : ''} ${className}`}
+                >
+                    <div className="card-top">
+                        <div>{card.value}</div>
+                        <div className="text-sm">{suitData.icon}</div>
+                    </div>
+                    <div className="card-center">{suitData.icon}</div>
+                    <div className="card-bottom">
+                        <div>{card.value}</div>
+                        <div className="text-sm">{suitData.icon}</div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            // App State
+            const [view, setView] = useState('intro'); // intro, auth, lobby, table_setup, game, admin
+            const [user, setUser] = useState(null); // { username, coins, wins, isAdmin }
+            const [registeredUsers, setRegisteredUsers] = useState([]); // Database for unique users
+            const [toast, setToast] = useState(null);
+            const [globalAd, setGlobalAd] = useState({
+                text: "✨ جشنواره تابستانه با جوایز ویژه! ✨",
+                link: "https://t.me/PoshtibaniDinoBot"
+            });
+            const [gameConfig, setGameConfig] = useState(null); // Settings passed to game
+
+            const showToast = (message, type = 'info') => setToast({ message, type });
+
+            // Handle Intro Timeout
+            useEffect(() => {
+                if (view === 'intro') {
+                    const timer = setTimeout(() => setView('auth'), 3500);
+                    return () => clearTimeout(timer);
+                }
+            }, [view]);
+
+            // Global State Updaters
+            const updateCoins = (amount) => {
+                if (user) {
+                    setUser(prev => {
+                        const updatedUser = { ...prev, coins: prev.coins + amount };
+                        setRegisteredUsers(users => users.map(u => u.username === updatedUser.username ? updatedUser : u));
+                        return updatedUser;
+                    });
+                }
+            };
+            const updateWins = () => {
+                if (user) {
+                    setUser(prev => {
+                        const updatedUser = { ...prev, wins: prev.wins + 1 };
+                        setRegisteredUsers(users => users.map(u => u.username === updatedUser.username ? updatedUser : u));
+                        return updatedUser;
+                    });
+                }
+            };
+
+            return (
+                <div className="w-full h-full flex flex-col items-center justify-center">
+                    {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+                    
+                    {view === 'intro' && <IntroScreen />}
+                    {view === 'auth' && <AuthScreen setView={setView} setUser={setUser} showToast={showToast} registeredUsers={registeredUsers} setRegisteredUsers={setRegisteredUsers} />}
+                    {view === 'lobby' && <LobbyScreen user={user} setView={setView} globalAd={globalAd} />}
+                    {view === 'table_setup' && <TableSetupScreen setView={setView} setGameConfig={setGameConfig} showToast={showToast} />}
+                    {view === 'game' && <GameScreen user={user} config={gameConfig} setView={setView} updateCoins={updateCoins} updateWins={updateWins} globalAd={globalAd} showToast={showToast} />}
+                    {view === 'admin' && <AdminScreen user={user} setView={setView} showToast={showToast} globalAd={globalAd} setGlobalAd={setGlobalAd} />}
+                </div>
+            );
+        };
+
+        const IntroScreen = () => (
+            <div className="flex flex-col items-center justify-center text-center space-y-6 intro-logo">
+                <div className="w-40 h-40 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(245,158,11,0.5)] border-4 border-amber-200">
+                    <i className="fas fa-crown text-7xl text-white drop-shadow-lg"></i>
+                </div>
+                <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter drop-shadow-2xl">
+                    بی‌نیاز <span className="text-amber-400">حکم</span>
+                </h1>
+                <p className="text-xl text-slate-300 tracking-widest mt-4">BINYAZ HOKM</p>
+                <div className="mt-10 flex space-x-2 space-x-reverse">
+                    <div className="w-3 h-3 bg-amber-400 rounded-full animate-bounce" style={{animationDelay: '0s'}}></div>
+                    <div className="w-3 h-3 bg-amber-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                    <div className="w-3 h-3 bg-amber-400 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></div>
+                </div>
+            </div>
+        );
+
+        const AuthScreen = ({ setView, setUser, showToast, registeredUsers, setRegisteredUsers }) => {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if (!username || !password) {
+                    showToast('لطفاً نام کاربری و رمز عبور را وارد کنید.', 'warning');
+                    return;
+                }
+
+                if (username === ADMIN_USER && password === ADMIN_PASS) {
+                    setUser({ username, isAdmin: true, coins: 999999, wins: 0 });
+                    showToast('ورود مدیر موفقیت آمیز بود.', 'success');
+                    setView('admin');
+                    return;
+                }
+
+                // بررسی وجود نام کاربری از قبل
+                const existingUser = registeredUsers.find(u => u.username === username);
+                
+                if (existingUser) {
+                    if (existingUser.password === password) {
+                        setUser(existingUser);
+                        showToast(`خوش برگشتی، ${username}!`, 'success');
+                        setView('lobby');
+                    } else {
+                        showToast('این نام کاربری قبلا ثبت شده. رمز عبور اشتباه است.', 'error');
+                    }
+                } else {
+                    const newUser = { username, password, isAdmin: false, coins: 500, wins: 0 };
+                    setRegisteredUsers([...registeredUsers, newUser]);
+                    setUser(newUser);
+                    showToast(`خوش آمدید، ${username}! ۵۰۰ سکه هدیه ثبت نام دریافت کردید.`, 'success');
+                    setView('lobby');
+                }
+            };
+
+            return (
+                <div className="w-full max-w-md p-6">
+                    <div className="glass-panel rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+                        {/* Decorative background blur */}
+                        <div className="absolute -top-20 -right-20 w-40 h-40 bg-amber-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+                        <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+                        
+                        <div className="text-center mb-8 relative z-10">
+                            <i className="fas fa-spade text-5xl text-amber-400 mb-4 drop-shadow-md"></i>
+                            <h2 className="text-3xl font-black text-white">ورود / ثبت‌نام</h2>
+                            <p className="text-slate-400 mt-2 text-sm">جهت ورود به دنیای بی‌نیاز حکم فرم زیر را پر کنید</p>
+                        </div>
+
+                        <form onSubmit={handleLogin} className="space-y-6 relative z-10">
+                            <div>
+                                <label className="block text-slate-300 text-sm font-bold mb-2">نام کاربری</label>
+                                <div className="relative">
+                                    <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500">
+                                        <i className="fas fa-user"></i>
+                                    </span>
+                                    <input 
+                                        type="text" 
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        className="w-full bg-slate-900/50 border border-slate-600 rounded-xl py-3 px-4 pr-10 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition"
+                                        placeholder="نام کاربری خود را وارد کنید"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-slate-300 text-sm font-bold mb-2">رمز عبور</label>
+                                <div className="relative">
+                                    <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500">
+                                        <i className="fas fa-lock"></i>
+                                    </span>
+                                    <input 
+                                        type="password" 
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full bg-slate-900/50 border border-slate-600 rounded-xl py-3 px-4 pr-10 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition"
+                                        placeholder="••••••••"
+                                    />
+                                </div>
+                            </div>
+                            <button 
+                                type="submit"
+                                className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-bold text-lg py-3 px-4 rounded-xl shadow-lg transform transition hover:scale-105 active:scale-95"
+                            >
+                                ورود به بازی
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const LobbyScreen = ({ user, setView, globalAd }) => {
+            const [onlineCount, setOnlineCount] = useState(1243);
+            const [leaderboard, setLeaderboard] = useState([]);
+
+            // Simulate online count fluctuation
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    setOnlineCount(prev => prev + Math.floor(Math.random() * 11) - 5);
+                }, 5000);
+                return () => clearInterval(interval);
+            }, []);
+
+            // Generate Leaderboard
+            useEffect(() => {
+                let currentLB = [...FAKE_PLAYERS];
+                if (user && user.wins > 0) {
+                    currentLB.push({ name: user.username + " (شما)", wins: user.wins });
+                }
+                currentLB.sort((a, b) => b.wins - a.wins);
+                setLeaderboard(currentLB.slice(0, 10)); // Top 10
+            }, [user.wins]);
+
+            return (
+                <div className="w-full h-full flex flex-col bg-slate-900 overflow-y-auto relative pb-20">
+                    {/* Header Info */}
+                    <div className="bg-slate-800/80 backdrop-blur-md sticky top-0 z-20 border-b border-slate-700 p-4 flex justify-between items-center shadow-md">
+                        <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-xl font-bold border-2 border-indigo-400 shadow-lg">
+                                {user.username.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <h2 className="font-bold text-lg leading-tight">{user.username}</h2>
+                                <p className="text-amber-400 font-bold text-sm flex items-center gap-1">
+                                    <i className="fas fa-coins"></i> {user.coins.toLocaleString()}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="text-left">
+                            <div className="text-emerald-400 text-sm font-bold flex items-center gap-2 justify-end">
+                                <span className="relative flex h-3 w-3">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                                </span>
+                                {onlineCount.toLocaleString()} آنلاین
+                            </div>
+                            {user.isAdmin && (
+                                <button onClick={() => setView('admin')} className="text-xs text-slate-400 underline mt-1">پنل مدیریت</button>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="p-4 space-y-6 max-w-4xl mx-auto w-full flex-grow">
+                        {/* Ad Banner Top */}
+                        <div className="w-full bg-gradient-to-r from-purple-900 to-indigo-900 rounded-2xl p-4 text-center shadow-lg border border-purple-500/30 overflow-hidden relative">
+                            <div className="absolute top-0 right-0 bg-yellow-500 text-slate-900 text-[10px] font-bold px-2 py-1 rounded-bl-lg">تبلیغات</div>
+                            <p className="text-white font-bold">{globalAd.text}</p>
+                        </div>
+
+                        {/* Play Actions */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <button 
+                                onClick={() => setView('table_setup')}
+                                className="glass-panel p-6 rounded-3xl border border-amber-500/50 hover:bg-slate-800 transition transform hover:-translate-y-1 group relative overflow-hidden"
+                            >
+                                <div className="absolute inset-0 bg-amber-500/10 group-hover:bg-amber-500/20 transition"></div>
+                                <i className="fas fa-play-circle text-5xl text-amber-500 mb-4 drop-shadow-md group-hover:scale-110 transition"></i>
+                                <h3 className="text-2xl font-black mb-2">شروع بازی</h3>
+                                <p className="text-slate-400 text-sm">ساخت میز اختصاصی یا ورود به میز دوستان</p>
+                            </button>
+                            
+                            <a 
+                                href="https://t.me/PoshtibaniDinoBot" target="_blank" rel="noreferrer"
+                                className="glass-panel p-6 rounded-3xl border border-blue-500/50 hover:bg-slate-800 transition transform hover:-translate-y-1 group relative overflow-hidden block text-center"
+                            >
+                                <div className="absolute inset-0 bg-blue-500/10 group-hover:bg-blue-500/20 transition"></div>
+                                <i className="fab fa-telegram text-5xl text-blue-400 mb-4 drop-shadow-md group-hover:scale-110 transition"></i>
+                                <h3 className="text-2xl font-black mb-2">ارتباط با ما</h3>
+                                <p className="text-slate-400 text-sm">پشتیبانی و ارتباط در تلگرام</p>
+                            </a>
+                        </div>
+
+                        {/* Leaderboard */}
+                        <div className="glass-panel rounded-3xl p-6">
+                            <div className="flex items-center gap-3 mb-6 border-b border-slate-700 pb-4">
+                                <i className="fas fa-trophy text-2xl text-amber-400"></i>
+                                <h3 className="text-xl font-bold">برترین‌های امروز</h3>
+                            </div>
+                            <div className="space-y-3">
+                                {leaderboard.map((p, index) => (
+                                    <div key={index} className={`flex justify-between items-center p-3 rounded-xl ${index === 0 ? 'bg-amber-500/20 border border-amber-500/30' : index === 1 ? 'bg-slate-400/20' : index === 2 ? 'bg-amber-700/20' : 'bg-slate-800/50'}`}>
+                                        <div className="flex items-center gap-3">
+                                            <span className={`font-black w-6 text-center ${index < 3 ? 'text-amber-400' : 'text-slate-500'}`}>#{index + 1}</span>
+                                            <span className="font-bold text-slate-200">{p.name}</span>
+                                        </div>
+                                        <div className="bg-slate-900 px-3 py-1 rounded-full text-sm font-bold text-amber-400">
+                                            {p.wins} برد
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const TableSetupScreen = ({ setView, setGameConfig, showToast }) => {
+            const [mode, setMode] = useState('create'); // create, join
+            const [playersCount, setPlayersCount] = useState(2); // 2 or 4
+            const [tableId, setTableId] = useState('');
+            const [tablePass, setTablePass] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+
+            const handleAction = () => {
+                if (!tableId || !/^\d+$/.test(tableId)) {
+                    showToast('شناسه میز باید فقط شامل اعداد باشد.', 'error');
+                    return;
+                }
+                
+                setIsLoading(true);
+                // Simulate network request
+                setTimeout(() => {
+                    setIsLoading(false);
+                    if (mode === 'join') {
+                        // In simulation, we accept any matching pattern or just fake success
+                        if (tableId.length < 3) {
+                            showToast('میز یافت نشد یا رمز اشتباه است.', 'error');
+                            return;
+                        }
+                        showToast('با موفقیت به میز متصل شدید!', 'success');
+                    } else {
+                        showToast('میز با موفقیت ساخته شد!', 'success');
+                    }
+                    
+                    setGameConfig({ playersCount, tableId, isHost: mode === 'create' });
+                    setView('game');
+                }, 1000);
+            };
+
+            return (
+                <div className="w-full h-full flex items-center justify-center p-4 relative">
+                    {/* Back Button */}
+                    <button onClick={() => setView('lobby')} className="absolute top-6 right-6 text-white text-xl z-10 w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center hover:bg-slate-700">
+                        <i className="fas fa-arrow-right"></i>
+                    </button>
+
+                    <div className="glass-panel w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
+                        {/* Tabs */}
+                        <div className="flex border-b border-slate-700">
+                            <button 
+                                onClick={() => setMode('create')}
+                                className={`flex-1 py-4 font-bold text-lg transition ${mode === 'create' ? 'bg-amber-500/20 text-amber-400 border-b-2 border-amber-500' : 'text-slate-400 hover:bg-slate-800'}`}
+                            >
+                                ساخت میز
+                            </button>
+                            <button 
+                                onClick={() => setMode('join')}
+                                className={`flex-1 py-4 font-bold text-lg transition ${mode === 'join' ? 'bg-amber-500/20 text-amber-400 border-b-2 border-amber-500' : 'text-slate-400 hover:bg-slate-800'}`}
+                            >
+                                ورود به میز
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {mode === 'create' && (
+                                <div>
+                                    <label className="block text-slate-300 text-sm font-bold mb-3">تعداد بازیکنان</label>
+                                    <div className="flex gap-4">
+                                        <button 
+                                            onClick={() => setPlayersCount(2)}
+                                            className={`flex-1 py-3 rounded-xl border-2 font-bold transition flex items-center justify-center gap-2 ${playersCount === 2 ? 'border-amber-500 bg-amber-500/10 text-white' : 'border-slate-600 text-slate-400 hover:border-slate-500'}`}
+                                        >
+                                            <i className="fas fa-user-friends"></i> ۲ نفره
+                                        </button>
+                                        <button 
+                                            onClick={() => setPlayersCount(4)}
+                                            className={`flex-1 py-3 rounded-xl border-2 font-bold transition flex items-center justify-center gap-2 ${playersCount === 4 ? 'border-amber-500 bg-amber-500/10 text-white' : 'border-slate-600 text-slate-400 hover:border-slate-500'}`}
+                                        >
+                                            <i className="fas fa-users"></i> ۴ نفره
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-amber-400 mt-2">* بازی ۴ نفره در حال حاضر با ربات‌های هوشمند اجرا می‌شود.</p>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-slate-300 text-sm font-bold mb-2">شناسه میز (فقط عدد)</label>
+                                <input 
+                                    type="text" pattern="\d*"
+                                    value={tableId} onChange={(e) => setTableId(e.target.value.replace(/\D/g,''))}
+                                    className="w-full bg-slate-900 border border-slate-600 rounded-xl py-3 px-4 text-center tracking-widest text-xl text-white focus:border-amber-400 focus:outline-none"
+                                    placeholder="مثلاً 1234"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-slate-300 text-sm font-bold mb-2">رمز عبور میز (اختیاری)</label>
+                                <input 
+                                    type="password"
+                                    value={tablePass} onChange={(e) => setTablePass(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-600 rounded-xl py-3 px-4 text-center text-white focus:border-amber-400 focus:outline-none"
+                                    placeholder="رمز عبور"
+                                />
+                            </div>
+
+                            <button 
+                                onClick={handleAction}
+                                disabled={isLoading}
+                                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-900 font-black text-lg py-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2"
+                            >
+                                {isLoading ? <i className="fas fa-spinner fa-spin"></i> : (mode === 'create' ? 'ایجاد و ورود' : 'جستجو و ورود')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const generateDeck = () => {
+            let deck = [];
+            for (let suit in SUITS) {
+                for (let i = 0; i < VALUES.length; i++) {
+                    // rank: higher index = higher card value. 2 is index 0, A is index 12.
+                    deck.push({ suit, value: VALUES[i], rank: i });
+                }
+            }
+            // Shuffle
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            return deck;
+        };
+
+        const GameScreen = ({ user, config, setView, updateCoins, updateWins, globalAd, showToast }) => {
+            const isFourPlayer = config.playersCount === 4;
+            const TOTAL_PLAYERS = isFourPlayer ? 4 : 2;
+            
+            // --- Game States ---
+            const [gameState, setGameState] = useState('waiting'); // waiting, dealing, select_hokm, playing, end_hand, end_game
+            
+            const [seats, setSeats] = useState(() => {
+                const arr = Array(TOTAL_PLAYERS).fill(null);
+                arr[0] = { name: user.username, icon: 'fa-user', color: 'bg-indigo-600', isBot: false };
+                // If user is joining (not host), simulate a full table automatically
+                if (!config.isHost) {
+                    for (let i = 1; i < TOTAL_PLAYERS; i++) {
+                        arr[i] = { name: `Bot ${i}`, icon: 'fa-robot', color: 'bg-slate-600', isBot: true };
+                    }
+                }
+                return arr;
+            });
+
+            const [deck, setDeck] = useState([]);
+            const [hands, setHands] = useState(Array(TOTAL_PLAYERS).fill([]));
+            const [tableCards, setTableCards] = useState(Array(TOTAL_PLAYERS).fill(null)); // Cards played in current trick
+            
+            const [hakemIndex, setHakemIndex] = useState(-1);
+            const [turnIndex, setTurnIndex] = useState(-1);
+            const [trumpSuit, setTrumpSuit] = useState(null);
+            
+            const [leadingSuit, setLeadingSuit] = useState(null);
+            const [currentTrickStarter, setCurrentTrickStarter] = useState(-1);
+            
+            // Scores
+            const [trickWins, setTrickWins] = useState(Array(TOTAL_PLAYERS === 4 ? 2 : 2).fill(0)); // Teams: [T1, T2]
+            const [setWins, setSetWins] = useState(Array(TOTAL_PLAYERS === 4 ? 2 : 2).fill(0)); // First to 3 sets
+            
+            const [showAdModal, setShowAdModal] = useState(false);
+            const [gameResult, setGameResult] = useState(null); // 'win' or 'lose'
+
+            // Ref for auto-play delays
+            const timerRef = useRef(null);
+
+            // --- Initialize Game / Round ---
+            const startNewRound = useCallback((isFirstRound = false) => {
+                const newDeck = generateDeck();
+                
+                let newHakem = hakemIndex;
+                if (isFirstRound) {
+                    newHakem = Math.floor(Math.random() * TOTAL_PLAYERS);
+                    setHakemIndex(newHakem);
+                }
+                
+                // Deal first 5 cards to everyone
+                let newHands = Array(TOTAL_PLAYERS).fill().map(() => []);
+                let dIndex = 0;
+                
+                // Deal 5 to hakem first to pick Hokm
+                for(let p=0; p<TOTAL_PLAYERS; p++) {
+                    const targetPlayer = (newHakem + p) % TOTAL_PLAYERS;
+                    for(let c=0; c<5; c++) {
+                        newHands[targetPlayer].push(newDeck[dIndex++]);
+                    }
+                }
+
+                setDeck(newDeck.slice(dIndex));
+                setHands(newHands);
+                setTableCards(Array(TOTAL_PLAYERS).fill(null));
+                setLeadingSuit(null);
+                setTrickWins(Array(2).fill(0)); // Reset tricks for new hand
+                setGameState('select_hokm');
+                setTurnIndex(newHakem); // Hakem's turn to pick
+            }, [hakemIndex, TOTAL_PLAYERS]);
+
+            // Initial Mount & Auto-start for guests
+            useEffect(() => {
+                let timer;
+                if (!config.isHost) {
+                    timer = setTimeout(() => {
+                        startNewRound(true);
+                    }, 2000);
+                }
+                return () => {
+                    if (timer) clearTimeout(timer);
+                    clearTimeout(timerRef.current);
+                };
+            }, [config.isHost, startNewRound]);
+
+            // Deal remaining cards after Hokm selected
+            const dealRestOfCards = () => {
+                let currentDeck = [...deck];
+                let currentHands = [...hands];
+                let dIndex = 0;
+                
+                // Deal remaining 8 cards (blocks of 4 usually, but simple deal here)
+                for(let i=0; i < 8; i++) {
+                    for(let p=0; p<TOTAL_PLAYERS; p++) {
+                        // Start dealing from player next to Hakem
+                        const target = (hakemIndex + 1 + p) % TOTAL_PLAYERS;
+                        if(dIndex < currentDeck.length) {
+                             currentHands[target].push(currentDeck[dIndex++]);
+                        }
+                    }
+                }
+                
+                // Sort player hand by suit and rank for better UI
+                currentHands[0].sort((a,b) => {
+                    if(a.suit !== b.suit) return a.suit.localeCompare(b.suit);
+                    return a.rank - b.rank;
+                });
+
+                setHands(currentHands);
+                setDeck([]);
+                setGameState('playing');
+                setTurnIndex(hakemIndex); // Hakem starts the first trick
+                setCurrentTrickStarter(hakemIndex);
+            };
+
+            // --- AI Logic ---
+            useEffect(() => {
+                if (gameState === 'select_hokm' && turnIndex !== 0) {
+                    // Bot picks Hokm
+                    timerRef.current = setTimeout(() => {
+                        const botHand = hands[turnIndex];
+                        // Simple logic: pick suit with most cards in first 5
+                        let counts = { '♠':0, '♥':0, '♣':0, '♦':0 };
+                        botHand.forEach(c => counts[c.suit]++);
+                        let bestSuit = '♠';
+                        let max = 0;
+                        for(let s in counts) {
+                            if(counts[s] > max) { max = counts[s]; bestSuit = s; }
+                        }
+                        handleHokmSelect(bestSuit);
+                    }, 1500);
+                } 
+                else if (gameState === 'playing' && turnIndex !== 0) {
+                    // Bot plays card
+                    timerRef.current = setTimeout(() => {
+                        playBotCard();
+                    }, 1500);
+                }
+            }, [gameState, turnIndex, hands]); // Removed some dependencies to prevent infinite loops, managed carefully
+
+            const handleHokmSelect = (suit) => {
+                setTrumpSuit(suit);
+                dealRestOfCards();
+            };
+
+            const getValidCards = (hand) => {
+                if (!leadingSuit) return hand; // Can play anything if starting
+                const followSuitCards = hand.filter(c => c.suit === leadingSuit);
+                if (followSuitCards.length > 0) return followSuitCards; // Must follow suit
+                return hand; // Can play anything (trump or trash)
+            };
+
+            const playBotCard = () => {
+                const botHand = [...hands[turnIndex]];
+                const validCards = getValidCards(botHand);
+                
+                // Dumb AI: play lowest valid card for now to keep it simple, or highest if trying to win
+                // Let's just pick a random valid card for simplicity in single file
+                const cardToPlay = validCards[Math.floor(Math.random() * validCards.length)];
+                
+                executePlayCard(turnIndex, cardToPlay);
+            };
+
+            const handleUserPlayCard = (card) => {
+                if (turnIndex !== 0 || gameState !== 'playing') return;
+                
+                const validCards = getValidCards(hands[0]);
+                if (!validCards.includes(card)) {
+                    // Provide feedback? Not strict requirement, but good UX. 
+                    // Visual disabled state handles this mostly.
+                    return; 
+                }
+                executePlayCard(0, card);
+            };
+
+            const executePlayCard = (playerIdx, card) => {
+                // Remove card from hand
+                const newHands = [...hands];
+                newHands[playerIdx] = newHands[playerIdx].filter(c => c !== card);
+                setHands(newHands);
+
+                // Place on table
+                const newTableCards = [...tableCards];
+                newTableCards[playerIdx] = card;
+                setTableCards(newTableCards);
+
+                // Set leading suit if first card
+                if (currentTrickStarter === playerIdx) {
+                    setLeadingSuit(card.suit);
+                }
+
+                // Check if trick is over
+                const nextTurn = (playerIdx + 1) % TOTAL_PLAYERS;
+                if (nextTurn === currentTrickStarter) {
+                    // Trick complete
+                    setTurnIndex(-1); // Pause turns
+                    setTimeout(() => resolveTrick(newTableCards, card.suit === leadingSuit ? leadingSuit : (currentTrickStarter===playerIdx ? card.suit : leadingSuit)), 1500); // Wait to show cards
+                } else {
+                    setTurnIndex(nextTurn);
+                }
+            };
+
+            const resolveTrick = (currentTableCards, leadSuit) => {
+                let winnerIdx = currentTrickStarter;
+                let winningCard = currentTableCards[winnerIdx];
+
+                for (let i = 0; i < TOTAL_PLAYERS; i++) {
+                    if (i === currentTrickStarter || !currentTableCards[i]) continue;
+                    
+                    const card = currentTableCards[i];
+                    
+                    if (card.suit === trumpSuit && winningCard.suit !== trumpSuit) {
+                        // Trump beats non-trump
+                        winnerIdx = i;
+                        winningCard = card;
+                    } else if (card.suit === winningCard.suit && card.rank > winningCard.rank) {
+                        // Higher rank of same suit beats
+                        winnerIdx = i;
+                        winningCard = card;
+                    }
+                }
+
+                // Update Tricks
+                const winningTeam = (winnerIdx % 2 === 0) ? 0 : 1; // 0=Player+Bot2, 1=Bot1+Bot3
+                const newTrickWins = [...trickWins];
+                newTrickWins[winningTeam]++;
+                setTrickWins(newTrickWins);
+
+                // Clear Table
+                setTableCards(Array(TOTAL_PLAYERS).fill(null));
+                setLeadingSuit(null);
+
+                // Check Hand Win (First to 7)
+                if (newTrickWins[winningTeam] >= 7) {
+                    endHand(winningTeam);
+                } else {
+                    // Next trick starts with winner
+                    setCurrentTrickStarter(winnerIdx);
+                    setTurnIndex(winnerIdx);
+                }
+            };
+
+            const endHand = (winningTeam) => {
+                setGameState('end_hand');
+                const newSetWins = [...setWins];
+                newSetWins[winningTeam]++;
+                setSetWins(newSetWins);
+
+                // Check Game Win (First to 3 sets)
+                if (newSetWins[winningTeam] >= 3) {
+                    const isPlayerWin = winningTeam === 0;
+                    setGameResult(isPlayerWin ? 'win' : 'lose');
+                    if (isPlayerWin) {
+                        updateCoins(200);
+                        updateWins();
+                    } else {
+                        updateCoins(-50);
+                    }
+                    setTimeout(() => {
+                        setGameState('end_game');
+                        setShowAdModal(true);
+                    }, 2000);
+                } else {
+                    // Next hand Hakem rule:
+                    // If Hakem team won, Hakem stays. If challengers won, next player becomes Hakem.
+                    const hakemTeam = (hakemIndex % 2 === 0) ? 0 : 1;
+                    if (winningTeam !== hakemTeam) {
+                        setHakemIndex((hakemIndex + 1) % TOTAL_PLAYERS);
+                    }
+                    
+                    setTimeout(() => {
+                        startNewRound(false);
+                    }, 3000);
+                }
+            };
+
+            const handleAddBot = (idx) => {
+                const newSeats = [...seats];
+                newSeats[idx] = { name: `Bot ${idx}`, icon: 'fa-robot', color: 'bg-slate-600', isBot: true };
+                setSeats(newSeats);
+            };
+
+            // --- UI Helpers ---
+            const renderPlayerSeat = (idx, positionClass) => {
+                const seat = seats[idx];
+                
+                if (!seat) {
+                    if (config.isHost && gameState === 'waiting') {
+                        return (
+                            <div className={`absolute flex flex-col items-center justify-center transition-all ${positionClass} z-30`}>
+                                <button onClick={() => handleAddBot(idx)} className="w-14 h-14 rounded-full border-2 border-dashed border-slate-400/50 flex flex-col items-center justify-center text-slate-400 hover:text-amber-400 hover:border-amber-400 transition hover:bg-slate-800/80 shadow-lg backdrop-blur-sm cursor-pointer">
+                                    <i className="fas fa-plus mb-1"></i>
+                                </button>
+                                <div className="bg-slate-900/80 px-2 py-1 rounded-full mt-2 text-[10px] font-bold text-amber-400/80 whitespace-nowrap border border-amber-500/30">
+                                    افزودن ربات
+                                </div>
+                            </div>
+                        );
+                    }
+                    return null;
+                }
+
+                const isTurn = turnIndex === idx;
+                const isHakem = hakemIndex === idx;
+                const pData = seat;
+                const teamIdx = idx % 2 === 0 ? 0 : 1;
+                const cardCount = hands[idx] ? hands[idx].length : 0;
+
+                return (
+                    <div className={`absolute flex flex-col items-center justify-center transition-all ${positionClass} ${isTurn ? 'scale-110 drop-shadow-[0_0_15px_rgba(251,191,36,0.8)]' : ''}`}>
+                        <div className="relative">
+                            <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl text-white shadow-lg border-2 border-white/20 ${pData.color}`}>
+                                <i className={`fas ${pData.icon}`}></i>
+                            </div>
+                            {isHakem && (
+                                <div className="absolute -top-3 -right-3 bg-amber-500 rounded-full w-8 h-8 flex items-center justify-center shadow-md animate-bounce">
+                                    <i className="fas fa-crown text-white text-sm"></i>
+                                </div>
+                            )}
+                        </div>
+                        <div className="bg-slate-900/80 px-3 py-1 rounded-full mt-2 text-xs font-bold whitespace-nowrap">
+                            {pData.name}
+                        </div>
+                        {idx !== 0 && cardCount > 0 && (
+                            <div className="mt-1 flex -space-x-2 -space-x-reverse justify-center">
+                                {/* Visual indicator of bot cards remaining */}
+                                {Array(Math.min(cardCount, 5)).fill().map((_, i) => (
+                                    <div key={i} className="w-4 h-6 bg-blue-800 rounded border border-white/50"></div>
+                                ))}
+                                {cardCount > 5 && <span className="text-xs text-slate-300 mr-1">+{cardCount-5}</span>}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            return (
+                <div className="w-full h-full bg-slate-900 flex flex-col relative overflow-hidden">
+                    {/* Top Bar Info */}
+                    <div className="h-16 bg-slate-800 border-b border-slate-700 flex justify-between items-center px-4 z-10">
+                        <button onClick={() => {
+                            updateCoins(-25);
+                            showToast(`بازیکن ${user.username} میز بازی را ترک کرد (۲۵- سکه جریمه).`, 'warning');
+                            setView('lobby');
+                        }} className="text-slate-400 hover:text-white transition flex items-center gap-2">
+                            <i className="fas fa-arrow-right"></i> خروج
+                        </button>
+                        
+                        <div className="flex gap-6 items-center">
+                            {/* Score Board */}
+                            <div className="bg-slate-900 rounded-lg flex overflow-hidden border border-slate-700 text-sm">
+                                <div className="px-4 py-1 bg-indigo-900/50 flex flex-col items-center">
+                                    <span className="text-indigo-300 text-xs">ما</span>
+                                    <div className="flex gap-2">
+                                        <span className="font-bold">D: {setWins[0]}</span>
+                                        <span className="text-amber-400">T: {trickWins[0]}</span>
+                                    </div>
+                                </div>
+                                <div className="px-4 py-1 bg-red-900/50 flex flex-col items-center border-r border-slate-700">
+                                    <span className="text-red-300 text-xs">حریف</span>
+                                    <div className="flex gap-2">
+                                        <span className="font-bold">D: {setWins[1]}</span>
+                                        <span className="text-amber-400">T: {trickWins[1]}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Trump Suit Info */}
+                            {trumpSuit && (
+                                <div className="bg-amber-500/20 border border-amber-500 text-amber-500 px-4 py-1 rounded-lg flex items-center gap-2 font-bold">
+                                    حکم: <span className={`text-xl ${SUITS[trumpSuit].color === 'red' ? 'text-red-500' : 'text-slate-200'}`}>{SUITS[trumpSuit].icon}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Game Table Area */}
+                    <div className="flex-1 relative p-4 flex items-center justify-center">
+                        <div className="w-full max-w-4xl h-full max-h-[800px] game-table-bg relative flex items-center justify-center">
+                            
+                            {/* Seats */}
+                            {renderPlayerSeat(0, 'bottom-4')}
+                            {isFourPlayer && renderPlayerSeat(1, 'left-4 top-1/2 -translate-y-1/2')}
+                            {renderPlayerSeat(isFourPlayer ? 2 : 1, 'top-4')}
+                            {isFourPlayer && renderPlayerSeat(3, 'right-4 top-1/2 -translate-y-1/2')}
+
+                            {/* Center Table / Played Cards */}
+                            <div className="relative w-64 h-64 flex items-center justify-center">
+                                {/* Center Logo subtle */}
+                                <div className="absolute opacity-10 pointer-events-none">
+                                    <i className="fas fa-crown text-9xl text-white"></i>
+                                </div>
+                                
+                                {tableCards[0] && <PlayingCard card={tableCards[0]} className="absolute bottom-10 z-10 transform scale-90" />}
+                                {isFourPlayer && tableCards[1] && <PlayingCard card={tableCards[1]} className="absolute left-0 top-1/2 -translate-y-1/2 rotate-90 z-10 transform scale-90" />}
+                                {tableCards[isFourPlayer ? 2 : 1] && <PlayingCard card={tableCards[isFourPlayer ? 2 : 1]} className="absolute top-10 z-10 transform scale-90" />}
+                                {isFourPlayer && tableCards[3] && <PlayingCard card={tableCards[3]} className="absolute right-0 top-1/2 -translate-y-1/2 -rotate-90 z-10 transform scale-90" />}
+                            </div>
+
+                            {/* Waiting for players / Start Game Modal */}
+                            {gameState === 'waiting' && (
+                                <div className="absolute inset-0 bg-black/60 rounded-[32px] flex flex-col items-center justify-center z-20 backdrop-blur-[3px]">
+                                    {config.isHost ? (
+                                        <div className="text-center p-8 glass-panel rounded-2xl border border-amber-500/30 slide-up max-w-sm w-full mx-4">
+                                            <h3 className="text-2xl font-bold mb-3 text-white">مدیریت میز</h3>
+                                            <p className="text-slate-300 mb-8 text-sm leading-relaxed">شما مدیر این میز هستید. لطفاً با کلیک روی صندلی‌های خالی (+)، ربات‌ها را به میز اضافه کنید.</p>
+                                            <button 
+                                                onClick={() => startNewRound(true)}
+                                                disabled={seats.includes(null)}
+                                                className={`w-full py-4 rounded-xl font-bold text-xl shadow-lg transition-all ${seats.includes(null) ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 hover:scale-105 hover:-translate-y-1'}`}
+                                            >
+                                                {seats.includes(null) ? 'منتظر تکمیل ظرفیت...' : 'شروع بازی'}
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center slide-up">
+                                            <div className="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+                                            <h3 className="text-xl font-bold text-white drop-shadow-md">در حال اتصال به میز و آماده‌سازی...</h3>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Hokm Selection Modal (In-table overlay) */}
+                            {gameState === 'select_hokm' && turnIndex === 0 && (
+                                <div className="absolute inset-0 bg-black/60 rounded-[32px] flex items-center justify-center z-20 backdrop-blur-sm">
+                                    <div className="bg-slate-800 border border-amber-500/50 p-6 rounded-2xl text-center slide-up">
+                                        <h3 className="text-2xl font-bold mb-4 text-white">شما حاکم هستید!</h3>
+                                        <p className="text-slate-400 mb-6">با توجه به ۵ کارت اول، حکم را تعیین کنید.</p>
+                                        <div className="flex gap-4 justify-center mb-6">
+                                            {/* Show first 5 cards briefly */}
+                                            {hands[0].map((c, i) => <PlayingCard key={i} card={c} className="scale-75 -mx-4" />)}
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-4">
+                                            {Object.keys(SUITS).map(suit => (
+                                                <button 
+                                                    key={suit}
+                                                    onClick={() => handleHokmSelect(suit)}
+                                                    className={`py-4 rounded-xl text-3xl hover:bg-slate-700 transition ${SUITS[suit].color === 'red' ? 'text-red-500 bg-red-500/10' : 'text-slate-200 bg-slate-700/50'}`}
+                                                >
+                                                    {SUITS[suit].icon}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Status Overlay messages */}
+                            {gameState === 'end_hand' && (
+                                <div className="absolute bg-black/80 px-8 py-4 rounded-full font-bold text-2xl text-amber-400 z-30 slide-up shadow-[0_0_30px_rgba(245,158,11,0.5)] border border-amber-500/50">
+                                    پایان دست!
+                                </div>
+                            )}
+                            {gameState === 'dealing' && (
+                                <div className="absolute text-slate-300/50 text-xl font-bold animate-pulse z-0">
+                                    در حال پخش کارت‌ها...
+                                </div>
+                            )}
+
+                        </div>
+                    </div>
+
+                    {/* Player Hand (Bottom) */}
+                    <div className="h-48 bg-slate-800 border-t border-slate-700 flex justify-center items-end pb-4 px-4 overflow-x-auto overflow-y-hidden z-20">
+                        <div className="flex -space-x-12 -space-x-reverse md:-space-x-8 md:-space-x-reverse min-w-max px-10">
+                            {hands[0].map((card, index) => {
+                                const validCards = getValidCards(hands[0]);
+                                const isValid = gameState === 'playing' && turnIndex === 0 && validCards.includes(card);
+                                
+                                return (
+                                    <div key={index} className="relative transition-transform duration-300 hover:z-50 hover:-translate-y-8">
+                                        <PlayingCard 
+                                            card={card} 
+                                            onClick={handleUserPlayCard}
+                                            disabled={!isValid && gameState === 'playing'}
+                                        />
+                                        {!isValid && gameState === 'playing' && turnIndex === 0 && (
+                                            <div className="absolute inset-0 bg-black/40 rounded-lg pointer-events-none"></div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Post-Game Ad Modal */}
+                    <Modal isOpen={showAdModal} title="پایان بازی">
+                        <div className="text-center space-y-6">
+                            <i className={`fas fa-trophy text-6xl ${gameResult === 'win' ? 'text-amber-400' : 'text-slate-600'}`}></i>
+                            <h2 className="text-3xl font-black text-white">
+                                {gameResult === 'win' ? 'شما برنده شدید!' : 'متاسفانه باختید!'}
+                            </h2>
+                            <p className="text-lg text-slate-300">
+                                {gameResult === 'win' ? '+۲۰۰ سکه جایزه شما' : '-۵۰ سکه کسر شد'}
+                            </p>
+                            
+                            {/* Special Ad Section */}
+                            <div className="mt-8 p-4 bg-gradient-to-r from-purple-900 to-indigo-900 rounded-xl border border-purple-500/50 cursor-pointer hover:scale-105 transition">
+                                <span className="text-xs bg-amber-500 text-slate-900 px-2 py-1 rounded font-bold mb-2 inline-block">پیشنهاد ویژه</span>
+                                <p className="font-bold text-white mb-2">{globalAd.text}</p>
+                                <a href={globalAd.link} target="_blank" rel="noreferrer" className="text-sm text-blue-300 underline">مشاهده پیشنهاد در تلگرام</a>
+                            </div>
+
+                            <button 
+                                onClick={() => setView('lobby')}
+                                className="w-full mt-6 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition"
+                            >
+                                بازگشت به لابی
+                            </button>
+                        </div>
+                    </Modal>
+
+                </div>
+            );
+        };
+
+        const AdminScreen = ({ user, setView, showToast, globalAd, setGlobalAd }) => {
+            const [targetUser, setTargetUser] = useState('');
+            const [coinsToAdd, setCoinsToAdd] = useState(1000);
+            
+            const [adText, setAdText] = useState(globalAd.text);
+            const [adLink, setAdLink] = useState(globalAd.link);
+
+            const handleAddCoins = () => {
+                if(!targetUser) return showToast('نام کاربری هدف را وارد کنید', 'error');
+                showToast(`${coinsToAdd} سکه به کاربر ${targetUser} اضافه شد. (شبیه‌سازی)`, 'success');
+                setTargetUser('');
+            };
+
+            const handleUpdateAd = () => {
+                setGlobalAd({ text: adText, link: adLink });
+                showToast('بنر تبلیغاتی با موفقیت بروزرسانی شد.', 'success');
+            };
+
+            return (
+                <div className="w-full h-full p-4 overflow-y-auto bg-slate-900">
+                    <div className="max-w-2xl mx-auto space-y-6">
+                        <div className="flex justify-between items-center bg-slate-800 p-4 rounded-2xl border border-slate-700">
+                            <h2 className="text-2xl font-bold text-red-500"><i className="fas fa-shield-alt mr-2"></i> پنل مدیریت</h2>
+                            <button onClick={() => setView('lobby')} className="bg-slate-700 px-4 py-2 rounded-lg hover:bg-slate-600 transition">بازگشت</button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Economy Management */}
+                            <div className="glass-panel p-6 rounded-2xl">
+                                <h3 className="font-bold text-lg mb-4 text-amber-400 border-b border-slate-700 pb-2">مدیریت سکه کاربران</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm mb-1">نام کاربری گیرنده</label>
+                                        <input type="text" value={targetUser} onChange={e=>setTargetUser(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm mb-1">مقدار سکه</label>
+                                        <input type="number" value={coinsToAdd} onChange={e=>setCoinsToAdd(Number(e.target.value))} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" />
+                                    </div>
+                                    <button onClick={handleAddCoins} className="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded font-bold transition">واریز سکه</button>
+                                </div>
+                            </div>
+
+                            {/* Ad Management */}
+                            <div className="glass-panel p-6 rounded-2xl">
+                                <h3 className="font-bold text-lg mb-4 text-blue-400 border-b border-slate-700 pb-2">تنظیمات تبلیغات (سرتاسری)</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm mb-1">متن بنر</label>
+                                        <textarea value={adText} onChange={e=>setAdText(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-sm" rows="2"></textarea>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm mb-1">لینک بنر (تلگرام و ...)</label>
+                                        <input type="text" value={adLink} onChange={e=>setAdLink(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-left" dir="ltr" />
+                                    </div>
+                                    <button onClick={handleUpdateAd} className="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded font-bold transition">بروزرسانی تبلیغات</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="text-center text-slate-500 text-sm mt-8">
+                            Binyaz Hokm Admin Panel &copy; 2026
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
